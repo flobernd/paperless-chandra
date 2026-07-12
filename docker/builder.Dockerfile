@@ -1,9 +1,9 @@
 # Builder image: produces the paperless-chandra wheel.
 #
-# The version-controlled build recipe for the plugin. Machine-specific
-# deployment Dockerfiles consume the /dist output as a named build
-# context, so the final paperless image installs a prebuilt wheel and
-# needs no build tools of its own.
+# The version-controlled build recipe for the plugin. The wheel is
+# extracted from /dist (docker create + docker cp, see README) and staged
+# next to setup.sh, so the paperless container installs a prebuilt wheel
+# and needs no build tools of its own.
 #
 # Build context is the repo root.
 FROM python:3.12-slim
