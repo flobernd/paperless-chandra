@@ -1,0 +1,38 @@
+# Full-pipeline e2e against a stub OpenAI-compatible server. Deterministic
+# and CPU-cheap: verifies consumer -> parser -> ocrmypdf -> engine -> HTTP
+# -> hOCR -> PDF/A -> API, not OCR accuracy.
+
+services:
+  paperless:
+    build:
+      context: ../..
+      dockerfile: docker/e2e.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - stub
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./consume:/usr/src/paperless/consume
+    environment:
+      PAPERLESS_REDIS: redis://redis:6379
+      PAPERLESS_SECRET_KEY: e2e-not-a-real-secret
+      PAPERLESS_ADMIN_USER: admin
+      PAPERLESS_ADMIN_PASSWORD: admin
+      PAPERLESS_OCR_LANGUAGE: eng
+      PAPERLESS_CHANDRA_SERVER_URL: http://stub:8080
+      PAPERLESS_CONSUMER_POLLING: "5"
+
+  stub:
+    image: python:3.12-slim
+    restart: unless-stopped
+    volumes:
+      - ./stub_chandra.py:/srv/stub_chandra.py:ro
+    command: ["python", "/srv/stub_chandra.py"]
+    expose:
+      - "8080"
+
+  redis:
+    image: redis:8
+    restart: unless-stopped

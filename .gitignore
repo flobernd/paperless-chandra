@@ -42,5 +42,8 @@ test-run/
 # Local docker deployment (contains .env secrets, staged tarball, consume dir)
 deploy/
 
+# e2e stub consume dir (generated test input, not part of the repo)
+tests/e2e/consume/
+
 # Claude Code per-session local scratch (not committed)
 .superpowers/
