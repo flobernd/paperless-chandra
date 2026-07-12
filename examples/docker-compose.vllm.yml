@@ -1,0 +1,97 @@
+# paperless-ngx (CPU-only) + Chandra on a local NVIDIA GPU via vLLM.
+#
+# Build + run from the examples/ directory:
+#   docker compose -f docker-compose.vllm.yml build
+#   docker compose -f docker-compose.vllm.yml up -d
+#
+# Required `.env` keys alongside this file:
+#   CHANDRA_API_KEY=<some-random-string>
+#   PAPERLESS_DB_USER=<db-user>
+#   PAPERLESS_DB_PASSWORD=<strong-db-password>
+# Optional: PLUGIN_REF=v0.1.0 (release tag for reproducible builds).
+#
+# The vLLM flags mirror the upstream chandra_vllm launcher, scaled for a
+# 24 GB GPU (L4 / RTX 4090 class). For an 80 GB H100 raise
+# --max-num-seqs to 64 and --max-num-batched-tokens to 8192.
+
+services:
+  paperless:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PLUGIN_REF: ${PLUGIN_REF:-master}
+        PAPERLESS_TAG: ${PAPERLESS_TAG:-beta}
+    image: paperless-chandra:latest
+    restart: unless-stopped
+    depends_on:
+      - paperless-db
+      - paperless-redis
+      - chandra-server
+    ports:
+      - "8000:8000"
+    volumes:
+      - paperless_data:/usr/src/paperless/data
+      - paperless_media:/usr/src/paperless/media
+      - ./consume:/usr/src/paperless/consume
+    environment:
+      PAPERLESS_REDIS: redis://paperless-redis:6379
+      PAPERLESS_DBHOST: paperless-db
+      PAPERLESS_DBUSER: ${PAPERLESS_DB_USER:?missing PAPERLESS_DB_USER in .env}
+      PAPERLESS_DBPASS: ${PAPERLESS_DB_PASSWORD:?missing PAPERLESS_DB_PASSWORD in .env}
+      PAPERLESS_OCR_LANGUAGE: eng
+      PAPERLESS_CHANDRA_SERVER_URL: http://chandra-server:8000
+      PAPERLESS_CHANDRA_MODEL_NAME: chandra
+      PAPERLESS_CHANDRA_API_KEY: ${CHANDRA_API_KEY:?missing CHANDRA_API_KEY in .env}
+
+  chandra-server:
+    image: vllm/vllm-openai:v0.17.0
+    restart: unless-stopped
+    command:
+      - --model=datalab-to/chandra-ocr-2
+      - --served-model-name=chandra
+      - --api-key=${CHANDRA_API_KEY:?missing CHANDRA_API_KEY in .env}
+      - --dtype=bfloat16
+      - --max-model-len=18000
+      - --max-num-seqs=16
+      - --max-num-batched-tokens=2048
+      - --gpu-memory-utilization=0.85
+      - --enable-prefix-caching
+      - --no-enforce-eager
+      - --mm-processor-kwargs={"min_pixels":3136,"max_pixels":6291456}
+    expose:
+      - "8000"
+    ipc: host
+    volumes:
+      # Persist downloaded model weights (~10 GB) between restarts.
+      - hf_cache:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: ["gpu"]
+              count: 1
+
+  paperless-db:
+    image: postgres:16
+    restart: unless-stopped
+    volumes:
+      - paperless_db:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: paperless
+      POSTGRES_USER: ${PAPERLESS_DB_USER:?missing PAPERLESS_DB_USER in .env}
+      POSTGRES_PASSWORD: ${PAPERLESS_DB_PASSWORD:?missing PAPERLESS_DB_PASSWORD in .env}
+
+  paperless-redis:
+    image: redis:8
+    restart: unless-stopped
+    volumes:
+      - paperless_redis:/data
+
+volumes:
+  paperless_data:
+  paperless_media:
+  paperless_db:
+  paperless_redis:
+  hf_cache:
