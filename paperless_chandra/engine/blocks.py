@@ -48,7 +48,7 @@ def block_lines(content_html: str) -> list[str]:
     for br in soup.find_all("br"):
         br.replace_with("\n")
     for widget in soup.find_all("input"):
-        if (widget.get("type") or "").lower() == "checkbox":
+        if str(widget.get("type") or "").lower() == "checkbox":
             widget.replace_with("[x]" if widget.has_attr("checked") else "[ ]")
         else:
             widget.replace_with(str(widget.get("value") or ""))
