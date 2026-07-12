@@ -91,6 +91,20 @@ def test_other_called_process_error_warns_once_with_excerpt(tmp_path, monkeypatc
     assert "osd.traineddata" in warnings[0].getMessage()
 
 
+def test_warn_once_flag_spans_failure_kinds(tmp_path, monkeypatch, caplog):
+    with caplog.at_level(logging.WARNING):
+        _run(monkeypatch, side_effect=FileNotFoundError())
+        assert osd.detect_orientation(tmp_path / "page.png") == (0, 0.0)
+        _run(
+            monkeypatch,
+            returncode=1,
+            stdout=b"Error, unable to open data file osd.traineddata\n",
+        )
+        assert osd.detect_orientation(tmp_path / "page.png") == (0, 0.0)
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert len(warnings) == 1
+
+
 def test_timeout_returns_zero(tmp_path, monkeypatch):
     _run(monkeypatch, side_effect=subprocess.TimeoutExpired(cmd="tesseract", timeout=60))
     assert osd.detect_orientation(tmp_path / "page.png") == (0, 0.0)
