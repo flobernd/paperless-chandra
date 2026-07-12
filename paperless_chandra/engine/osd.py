@@ -14,7 +14,7 @@ import logging
 import subprocess
 from pathlib import Path
 
-log = logging.getLogger("paperless.chandra.engine")
+log = logging.getLogger("paperless.chandra.osd")
 
 #: OSD only classifies orientation, a fraction of the work of a full OCR pass; the bound only
 #: exists so a hung tesseract process cannot stall the Celery worker indefinitely.
