@@ -10,12 +10,10 @@ from typing import Any
 from ocrmypdf.pluginspec import OcrEngine, OrientationConfidence
 from PIL import Image
 
-from paperless_chandra.engine import blocks, client, deskew, pdf
+from paperless_chandra.engine import blocks, client, deskew, osd, pdf
 from paperless_chandra.engine.hocr import write_document
 
 log = logging.getLogger("paperless.chandra.engine")
-
-_rotate_warned = False
 
 
 def _chandra_version() -> str:
@@ -47,14 +45,12 @@ class ChandraEngine(OcrEngine):
 
     @staticmethod
     def get_orientation(input_file: Path, options: Any) -> OrientationConfidence:
-        global _rotate_warned
-        if not _rotate_warned:
-            log.warning(
-                "PAPERLESS_OCR_ROTATE_PAGES is not supported by paperless-chandra; "
-                "pages are OCR'd in their stored orientation."
-            )
-            _rotate_warned = True
-        return OrientationConfidence(angle=0, confidence=0.0)
+        try:
+            angle, confidence = osd.detect_orientation(input_file)
+            return OrientationConfidence(angle=angle, confidence=confidence)
+        except Exception:
+            log.exception("Orientation detection failed for %s; skipping rotation.", input_file)
+            return OrientationConfidence(angle=0, confidence=0.0)
 
     @staticmethod
     def get_deskew(input_file: Path, options: Any) -> float:

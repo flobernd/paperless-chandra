@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from PIL import Image
 
 from paperless_chandra.engine import client as client_module
+from paperless_chandra.engine import osd as osd_module
 from paperless_chandra.engine.engine import ChandraEngine
 
 #: bbox values are normalised 0-1000; with a 1000x1000 page they map 1:1.
@@ -87,10 +88,11 @@ def test_languages_reports_requested_codes():
     assert ChandraEngine.languages(_options(languages=["eng", "deu"])) >= {"eng", "deu"}
 
 
-def test_get_orientation_is_a_noop(tmp_path):
+def test_get_orientation_maps_osd_result(tmp_path, monkeypatch):
+    monkeypatch.setattr(osd_module, "detect_orientation", lambda input_file: (180, 9.95))
     oc = ChandraEngine.get_orientation(_page_png(tmp_path), _options())
-    assert oc.angle == 0
-    assert oc.confidence == 0.0
+    assert oc.angle == 180
+    assert oc.confidence == 9.95
 
 
 def test_creator_tag_mentions_chandra():

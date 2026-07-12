@@ -232,7 +232,7 @@ dataclass that the Tesseract parser uses, then passed to `ocrmypdf.ocr()` exactl
 | `PAPERLESS_OCR_OUTPUT_TYPE` | `pdf` / `pdfa` / `pdfa-1` / `pdfa-2` / `pdfa-3`. |
 | `PAPERLESS_OCR_CLEAN` | `clean` / `clean-final` / `none`. |
 | `PAPERLESS_OCR_DESKEW` | See below - supported locally, no round trip to the inference server. |
-| `PAPERLESS_OCR_ROTATE_PAGES`, `PAPERLESS_OCR_ROTATE_PAGES_THRESHOLD` | See below - not supported in this release. |
+| `PAPERLESS_OCR_ROTATE_PAGES`, `PAPERLESS_OCR_ROTATE_PAGES_THRESHOLD` | See below - supported via tesseract's OSD mode. |
 | `PAPERLESS_OCR_PAGES` | OCR only the first N pages. |
 | `PAPERLESS_OCR_IMAGE_DPI` | Fallback DPI for images without DPI metadata. |
 | `PAPERLESS_OCR_COLOR_CONVERSION_STRATEGY` | Ghostscript color strategy for PDF/A. |
@@ -247,9 +247,10 @@ Three differences from a Tesseract-driven setup:
   attribute. The engine reports every requested code as supported so ocrmypdf preflight never
   aborts.
 - `PAPERLESS_OCR_DESKEW`: supported via a projection-profile skew estimator (no model required).
-- `PAPERLESS_OCR_ROTATE_PAGES`: not supported in this release. Orientation detection returns a
-  zero-confidence no-op, logs once per process, and this limitation is documented here. A fully
-  rotated page will OCR poorly; mild skew is handled by deskew and by the model's own tolerance.
+- `PAPERLESS_OCR_ROTATE_PAGES`: supported via tesseract's OSD mode (`--psm 0`), a fast local
+  orientation probe; Chandra still performs all text recognition. The tesseract binary and
+  `osd.traineddata` ship in the official paperless-ngx image. If they are missing (custom
+  images), the plugin logs one warning and pages keep their stored orientation.
 
 ## Limitations
 
