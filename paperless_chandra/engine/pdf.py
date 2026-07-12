@@ -4,7 +4,9 @@ Per ocrmypdf's ``OcrEngine.generate_pdf`` contract the page must carry the
 invisible text *only* - no raster. ocrmypdf's sandwich pipeline grafts the
 original scan onto it afterwards, so drawing the image here would
 double-render it. ocrmypdf 17 replaced the old monolithic transform with a
-parser plus an fpdf2 renderer; this uses that surface directly.
+parser plus an fpdf2 renderer; this uses that surface directly. These
+modules are private with no stability promise; last verified against
+ocrmypdf 17.8, and CI's fresh-install run is the canary for moves.
 """
 
 from __future__ import annotations
