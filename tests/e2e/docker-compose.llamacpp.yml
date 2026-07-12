@@ -1,0 +1,60 @@
+# Full-pipeline e2e against the real quantized Chandra model on CPU via
+# llama.cpp. Slow (minutes per page on a small host) but exercises true
+# model output end to end. Run tests/e2e/download-model.sh first.
+
+services:
+  paperless:
+    build:
+      context: ../..
+      dockerfile: docker/e2e.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - llamacpp
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./consume:/usr/src/paperless/consume
+    environment:
+      PAPERLESS_REDIS: redis://redis:6379
+      PAPERLESS_SECRET_KEY: e2e-not-a-real-secret
+      PAPERLESS_ADMIN_USER: admin
+      PAPERLESS_ADMIN_PASSWORD: admin
+      PAPERLESS_OCR_LANGUAGE: eng
+      PAPERLESS_CHANDRA_SERVER_URL: http://llamacpp:8080
+      # Small budget keeps CPU generation inside the client's 600 s timeout.
+      PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS: "4096"
+      PAPERLESS_CONSUMER_POLLING: "5"
+
+  llamacpp:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    restart: unless-stopped
+    volumes:
+      - ./models:/models:ro
+    command:
+      - -m
+      - /models/chandra-q4_k_m.gguf
+      - --mmproj
+      - /models/mmproj.gguf
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      # Reduced from the model's native 8192: this host has ~8 GB RAM total and
+      # no swap, so KV cache and compute buffers (resident, unlike the mmapped
+      # weights) need to stay small. The test page's prompt+output fit under 4096.
+      - --ctx-size
+      - "4096"
+      # llama-server defaults to 4 parallel slots, each holding a full
+      # ctx-size KV cache (4x the memory for concurrency this single-page
+      # e2e test never uses). One slot is enough and was needed to avoid
+      # an OOM kill on this host.
+      - --parallel
+      - "1"
+      - --jinja
+    expose:
+      - "8080"
+
+  redis:
+    image: redis:8
+    restart: unless-stopped
