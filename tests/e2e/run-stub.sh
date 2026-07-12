@@ -13,5 +13,8 @@ rm -rf consume && mkdir -p consume
 docker compose -f docker-compose.stub.yml up -d --build
 
 "$PY" make_test_page.py consume/e2e-test.png
-"$PY" assert_e2e.py --expect "PAPERLESS CHANDRA STUB OK" --expect "Stub invoice 2026-0042" --timeout 600
+"$PY" make_test_page.py consume/e2e-rotated.png 180
+"$PY" assert_e2e.py \
+  --expect "PAPERLESS CHANDRA STUB OK" --expect "Stub invoice 2026-0042" \
+  --expect-docs 2 --assert-upright e2e-rotated --timeout 600
 echo "== stub e2e passed =="
