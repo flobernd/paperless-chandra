@@ -33,7 +33,7 @@ Thumbs.db
 # Local bootstrap output (sdist + setup.sh staged for /custom-cont-init.d)
 bootstrap/
 
-# Claude Code per-user local overrides (machine-specific paths, not shared)
+# Per-user local tool overrides (machine-specific paths, not shared)
 .claude/settings.local.json
 
 # Local test harness (not part of the distributed package)
@@ -48,5 +48,5 @@ tests/e2e/consume/
 # e2e llama.cpp model weights (downloaded by download-model.sh, ~4 GB)
 tests/e2e/models/
 
-# Claude Code per-session local scratch (not committed)
+# Local session scratch (not committed)
 .superpowers/

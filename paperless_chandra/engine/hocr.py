@@ -36,7 +36,7 @@ class Word:
 
     text: str
     box: BBox
-    confidence: int  # 0–100, serialised as x_wconf
+    confidence: int  # 0-100, serialised as x_wconf
 
 
 @dataclass
