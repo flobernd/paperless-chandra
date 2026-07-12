@@ -32,6 +32,7 @@ dependencies = [
     "chandra-ocr>=0.2",
     "beautifulsoup4>=4.12",
     "numpy>=1.26",
+    "pillow>=10",
 ]
 
 [project.urls]
