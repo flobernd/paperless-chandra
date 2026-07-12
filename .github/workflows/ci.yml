@@ -1,0 +1,163 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Lint YAML
+        uses: ibiqlik/action-yamllint@v3
+        with:
+          config_file: .yamllint
+
+      - name: Lint Markdown
+        uses: DavidAnson/markdownlint-cli2-action@v18
+        with:
+          globs: "**/*.md\n!docs/superpowers/**"
+          config: .markdownlint.yaml
+
+  ruff:
+    name: Ruff
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # astral-sh/ruff-action replaces the deleted reviewdog/action-ruff-pr;
+      # --output-format=github emits PR annotations.
+      - name: Run Ruff
+        uses: astral-sh/ruff-action@v4
+        with:
+          args: "check --output-format=github"
+
+  mypy:
+    name: MyPy
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install mypy and typed runtime deps
+        run: |
+          python -m pip install --upgrade pip mypy
+          python -m pip install "ocrmypdf>=17.4" "chandra-ocr>=0.2" "beautifulsoup4>=4.12" numpy
+
+      # reviewdog/action-mypy was deleted; reviewdog/action-setup installs the
+      # reviewdog CLI, which parses mypy's column output into PR annotations.
+      - name: Install reviewdog
+        uses: reviewdog/action-setup@v1
+
+      - name: Run MyPy with reviewdog
+        run: |
+          mypy --ignore-missing-imports --show-column-numbers --no-pretty --no-error-summary paperless_chandra 2>&1 | \
+            reviewdog -name=mypy -f=errorformat -efm="%f:%l:%c: %m" \
+              -reporter=github-pr-review -filter-mode=diff_context \
+              -level=warning -fail-on-error=true
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Gates ruff (lint + format) and mypy on every push and PR; the ruff and
+  # mypy jobs above add inline PR review annotations on pull requests.
+  static:
+    name: Static checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff, mypy and typed runtime deps
+        run: |
+          python -m pip install --upgrade pip ruff mypy
+          python -m pip install "ocrmypdf>=17.4" "chandra-ocr>=0.2" "beautifulsoup4>=4.12" numpy
+
+      # Mirrors the reviewdog `ruff`/`mypy` jobs (which only annotate PRs)
+      # so a direct push to master is gated too. Also gates `ruff format`,
+      # which the reviewdog jobs do not check.
+      - name: Ruff lint
+        run: ruff check .
+
+      - name: Ruff format
+        run: ruff format --check .
+
+      - name: MyPy
+        run: mypy --ignore-missing-imports paperless_chandra
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install runtime + test deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install . pytest pikepdf
+
+      - name: Run pytest
+        run: pytest tests/ -q
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: python -m pip install --upgrade pip build wheel
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Verify wheel installs
+        run: |
+          python -m pip install --no-deps dist/*.whl
+          python -c "import paperless_chandra; print(paperless_chandra.__version__)"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+          if-no-files-found: error

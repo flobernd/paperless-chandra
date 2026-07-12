@@ -1,0 +1,58 @@
+name: Smoke (paperless-ngx)
+
+# Runs inside the real paperless-ngx beta image so we catch API drift in
+# the paperless parser-plugin surface that the lightweight unit suite
+# (which never imports Django/paperless) cannot. chandra-ocr and its
+# pure-python dependencies install alongside paperless's pinned packages;
+# the smoke test exercises import wiring and entry-point discovery, not
+# actual OCR.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Import + entry-point smoke
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/paperless-ngx/paperless-ngx:beta
+      # paperless's s6 entrypoint would try to boot the whole app; we only
+      # want a shell to run the smoke script.
+      options: --entrypoint /bin/bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Locate paperless Python
+        id: py
+        run: |
+          if [ -x /usr/src/paperless/.venv/bin/python ]; then
+            echo "bin=/usr/src/paperless/.venv/bin/python" >> "$GITHUB_OUTPUT"
+          else
+            echo "bin=$(command -v python3)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install package
+        run: |
+          "${{ steps.py.outputs.bin }}" -m pip install --break-system-packages .
+
+      - name: Run smoke test
+        env:
+          PYTHONPATH: /usr/src/paperless/src
+          DJANGO_SETTINGS_MODULE: paperless.settings
+          # Minimal settings so `django.setup()` / settings import does not
+          # require live services. paperless.settings reads these with
+          # sensible fallbacks; no DB/Redis connection happens at import.
+          PAPERLESS_REDIS: redis://localhost:6379
+          PAPERLESS_DBENGINE: sqlite
+          PAPERLESS_SECRET_KEY: smoke-test-not-a-real-secret
+        run: |
+          "${{ steps.py.outputs.bin }}" tests/smoke_paperless.py
