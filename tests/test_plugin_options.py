@@ -51,6 +51,12 @@ def test_check_options_rejects_unknown_content_format():
         ocrmypdf_plugin.check_options(_options(chandra_content_format="html"))
 
 
+@pytest.mark.parametrize("tokens", [0, -1])
+def test_check_options_rejects_non_positive_max_output_tokens(tokens):
+    with pytest.raises(ValueError):
+        ocrmypdf_plugin.check_options(_options(chandra_max_output_tokens=tokens))
+
+
 def test_probe_maps_auth_failure(monkeypatch):
     def raise_401(request, timeout):
         raise urllib.error.HTTPError(request.full_url, 401, "unauthorized", {}, None)

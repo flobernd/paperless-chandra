@@ -135,6 +135,13 @@ def check_options(options: Any) -> None:
             f"Unknown chandra_content_format={fmt!r}. Valid choices: {list(_CONTENT_FORMATS)}."
         )
 
+    # argparse's `type=int` has no lower bound, and the Python API skips
+    # argparse entirely, so a non-positive value would otherwise only
+    # surface per-page inside generate_vllm.
+    tokens = getattr(options, "chandra_max_output_tokens", None)
+    if tokens is not None and tokens < 1:
+        raise ValueError(f"chandra_max_output_tokens must be at least 1, got {tokens}.")
+
     try:
         import chandra.model.vllm  # noqa: F401
     except ImportError as e:
