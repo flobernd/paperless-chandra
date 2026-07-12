@@ -1,0 +1,46 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+htmlcov/
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Local bootstrap output (sdist + setup.sh staged for /custom-cont-init.d)
+bootstrap/
+
+# Claude Code per-user local overrides (machine-specific paths, not shared)
+.claude/settings.local.json
+
+# Local test harness (not part of the distributed package)
+test-run/
+
+# Local docker deployment (contains .env secrets, staged tarball, consume dir)
+deploy/
+
+# Claude Code per-session local scratch (not committed)
+.superpowers/
