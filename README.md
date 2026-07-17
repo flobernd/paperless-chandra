@@ -1,8 +1,8 @@
 <!-- markdownlint-disable-file MD033 MD041 -->
 <div align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
-    <img src="assets/logo-light.svg" alt="paperless-chandra" width="360">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.png">
+    <img src="assets/logo-light.png" alt="paperless-chandra" width="360">
   </picture>
 </div>
 
