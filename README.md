@@ -1,4 +1,10 @@
-# paperless-chandra
+<!-- markdownlint-disable-file MD033 MD041 -->
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+    <img src="assets/logo-light.svg" alt="paperless-chandra" width="360">
+  </picture>
+</div>
 
 A [Chandra OCR](https://github.com/datalab-to/chandra) provider for
 [paperless-ngx](https://github.com/paperless-ngx/paperless-ngx), delivered as a parser plugin that
@@ -21,47 +27,16 @@ keeps working, and archive PDFs remain PDF/A.
 - 90+ languages and mixed scripts recognized in a single pass, with no per-language configuration
 - Complex layout, tables, and handwriting handled by a ~5B-parameter vision-language model
 - Document content stored as plain text or markdown (`PAPERLESS_CHANDRA_CONTENT_FORMAT`)
-- Works with any OpenAI-compatible inference server: vLLM, llama.cpp, Ollama
-
-## Architecture
-
-```text
-paperless consumer
-        ▼
-PaperlessChandraParser      ← this package (paperless parser plugin)
-        ▼
-ocrmypdf.ocr(plugins=[…])   ← paperless already invokes ocrmypdf for tesseract
-        ▼
-ChandraEngine                ← this package (ocrmypdf OcrEngine over Chandra)
-        ▼
-chandra-ocr generate_vllm    ← upstream client: prompt, retries, repeat-token detection
-        ▼
-OpenAI-compatible /v1/chat/completions   (self-hosted vLLM / llama.cpp / Ollama)
-```
-
-`ocrmypdf` continues to handle rasterisation, PDF/A conversion, deskew, image cleaning, sidecar text
-extraction, color conversion, and encryption - only the OCR engine itself is replaced.
-
-The two layers contributed by *this* package:
-
-- **`PaperlessChandraParser`** - paperless parser plugin discovered through the
-  `paperless_ngx.parsers` entry point. Mirrors paperless's built-in Tesseract parser and points
-  `ocrmypdf` at the Chandra engine.
-- **`ChandraEngine`** - the ocrmypdf `OcrEngine` implementation that calls the remote Chandra
-  server, emits hOCR, and renders the text-only PDF layer.
-
-Unlike a multi-engine OCR setup, there is no language mapping step and no multi-language merge
-pass: Chandra takes no language parameter, reads mixed scripts in a single pass, and its own block
-order is trusted as reading order.
+- Works with any OpenAI-compatible inference server (vLLM reference deployment)
 
 ## Requirements
 
 - A self-hosted, OpenAI-compatible inference server running Chandra. vLLM is the reference
-  deployment ([`examples/docker-compose.vllm.yml`](examples/docker-compose.vllm.yml)); llama.cpp
-  and Ollama can serve the published quantized GGUF checkpoints through the same API.
+  deployment ([`examples/docker-compose.vllm.yml`](examples/docker-compose.vllm.yml)); any server
+  exposing the same `/v1/chat/completions` API works.
 - Full-precision (bf16) inference needs a GPU in the ~24 GB class (L4, RTX 4090, or larger) using
-  the flags documented in the compose example below. Quantized GGUF builds served through
-  llama.cpp or Ollama fit on smaller GPUs, or run on CPU alone at reduced speed - see
+  the flags documented in the compose example below. Quantized GGUF checkpoints served through a
+  compatible server fit on smaller GPUs, or run on CPU alone at reduced speed - see
   [Performance notes](#performance-notes).
 
 > [!NOTE]
@@ -208,7 +183,7 @@ standard `PAPERLESS_OCR_*` variables (see
 | Variable | Default | Description |
 | --- | --- | --- |
 | `PAPERLESS_CHANDRA_SERVER_URL` | *(required)* | URL of the OpenAI-compatible inference server hosting Chandra, for example `http://gpu-host:8000`. The `/v1` suffix is appended automatically when missing. |
-| `PAPERLESS_CHANDRA_MODEL_NAME` | `chandra` | Served model name the inference server advertises. Matches the vLLM launcher default; Ollama users must override this to their local model tag. |
+| `PAPERLESS_CHANDRA_MODEL_NAME` | `chandra` | Served model name the inference server advertises. Matches the vLLM launcher default; override it when your server advertises a different name. |
 | `PAPERLESS_CHANDRA_API_KEY` | *(unset)* | Bearer token for the server. When unset, the vLLM convention `EMPTY` is sent instead. |
 | `PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS` | `12384` | Per-page output token budget passed to the inference server. Lower it to keep slow CPU inference inside the client timeout (see [Troubleshooting](#troubleshooting)). |
 | `PAPERLESS_CHANDRA_CONTENT_FORMAT` | `text` | `text` or `markdown`. Selects what paperless stores as document content; the invisible PDF text layer underneath is always plain text. |
@@ -271,10 +246,9 @@ Three differences from a Tesseract-driven setup:
 
 - Expect roughly 1-2 pages/sec on a datacenter GPU running vLLM (rough guidance, not a benchmark -
   measure on your own hardware).
-- Smaller GPUs running quantized GGUF builds through llama.cpp or Ollama take tens of seconds per
-  page.
-- CPU-only llama.cpp inference takes minutes per page - fine for light, occasional ingestion, not
-  for batches.
+- Smaller GPUs running quantized GGUF checkpoints take tens of seconds per page.
+- CPU-only inference takes minutes per page - fine for light, occasional ingestion, not for
+  batches.
 - Scale page throughput with `PAPERLESS_TASK_WORKERS` (each worker process gets its own engine
   instance). ocrmypdf still parallelises rasterisation and post-processing across
   `PAPERLESS_THREADS_PER_WORKER` threads, and those threads may issue OCR requests to the
@@ -304,10 +278,11 @@ fails fast with an actionable message instead of failing deep inside a Celery ta
 Lower `PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS` so generations finish faster, or move to a GPU-backed
 server. See [Performance notes](#performance-notes).
 
-### Ollama rejects requests with "model not found"
+### Server rejects requests with "model not found"
 
-Ollama serves models under the tag you pulled them as, not `chandra`. Set
-`PAPERLESS_CHANDRA_MODEL_NAME` to match your local model tag.
+The server advertises a model name that does not match `PAPERLESS_CHANDRA_MODEL_NAME`. Set
+`PAPERLESS_CHANDRA_MODEL_NAME` to the name your server serves (for vLLM, the `--served-model-name`
+value).
 
 ## License
 

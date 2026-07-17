@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 210" role="img" aria-label="paperless-chandra">
+  <title>paperless-chandra</title>
+  <defs>
+    <linearGradient id="moon-d" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#818CF8"/>
+      <stop offset="1" stop-color="#C4B5FD"/>
+    </linearGradient>
+    <mask id="bite-d" maskUnits="userSpaceOnUse">
+      <circle cx="44" cy="52" r="42" fill="#fff"/>
+      <circle cx="68" cy="40" r="40" fill="#000"/>
+    </mask>
+  </defs>
+
+  <g transform="translate(84,16)">
+    <g mask="url(#bite-d)">
+      <circle cx="44" cy="52" r="42" fill="url(#moon-d)"/>
+    </g>
+    <rect x="38" y="18" width="50" height="64" rx="8" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="2"/>
+    <rect x="47" y="30" width="26" height="5" rx="2.5" fill="#818CF8"/>
+    <rect x="47" y="41" width="32" height="4" rx="2" fill="#94A3B8"/>
+    <rect x="47" y="50" width="32" height="4" rx="2" fill="#94A3B8"/>
+    <rect x="47" y="59" width="24" height="4" rx="2" fill="#94A3B8"/>
+    <rect x="47" y="68" width="18" height="4" rx="2" fill="#94A3B8"/>
+  </g>
+
+  <text x="140" y="166" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="27" letter-spacing="-0.3">
+    <tspan fill="#94A3B8" font-weight="500">paperless-</tspan><tspan fill="#A5B4FC" font-weight="700">chandra</tspan>
+  </text>
+  <text x="140" y="190" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12" letter-spacing="0.5" fill="#94A3B8">Chandra OCR for paperless-ngx</text>
+</svg>
