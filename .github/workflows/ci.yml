@@ -25,7 +25,7 @@ jobs:
       - name: Lint Markdown
         uses: DavidAnson/markdownlint-cli2-action@v18
         with:
-          globs: "**/*.md\n!docs/superpowers/**"
+          globs: "**/*.md"
           config: .markdownlint.yaml
 
   ruff:
