@@ -52,6 +52,12 @@ services:
       - --parallel
       - "1"
       - --jinja
+      # Chandra 2 is a no-think fine-tune, but GGUF conversions embed the
+      # base Qwen3.5 chat template, which turns thinking back on. The model
+      # then never closes the think block and llama-server diverts the whole
+      # OCR output to reasoning_content, leaving message.content empty.
+      - --chat-template-kwargs
+      - '{"enable_thinking":false}'
     expose:
       - "8080"
 
