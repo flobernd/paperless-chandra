@@ -40,9 +40,10 @@ jobs:
         uses: actions/checkout@v4
 
       # astral-sh/ruff-action replaces the deleted reviewdog/action-ruff-pr;
-      # --output-format=github emits PR annotations.
+      # --output-format=github emits PR annotations. Exact tag: upstream
+      # publishes no floating v4 major alias, so @v4 does not resolve.
       - name: Run Ruff
-        uses: astral-sh/ruff-action@v4
+        uses: astral-sh/ruff-action@v4.1.0
         with:
           args: "check --output-format=github"
 
@@ -75,7 +76,7 @@ jobs:
       - name: Run MyPy with reviewdog
         run: |
           mypy --ignore-missing-imports --show-column-numbers --no-pretty --no-error-summary paperless_chandra 2>&1 | \
-            reviewdog -name=mypy -f=errorformat -efm="%f:%l:%c: %m" \
+            reviewdog -name=mypy -efm="%f:%l:%c: %m" \
               -reporter=github-pr-review -filter-mode=diff_context \
               -level=warning -fail-on-error=true
         env:
