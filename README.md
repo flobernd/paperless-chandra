@@ -284,6 +284,25 @@ The server advertises a model name that does not match `PAPERLESS_CHANDRA_MODEL_
 `PAPERLESS_CHANDRA_MODEL_NAME` to the name your server serves (for vLLM, the `--served-model-name`
 value).
 
+### Documents come back with empty text when served from a GGUF (llama.cpp, Ollama, LM Studio)
+
+Chandra 2 is a no-think fine-tune of a hybrid reasoning model, and its official chat template
+keeps thinking disabled. GGUF conversions instead embed the base model's template, which turns
+thinking back on: the model then never closes the `<think>` block, llama.cpp diverts the whole
+OCR output into `reasoning_content`, and the plugin receives empty message content, so every
+page ends up with no text. vLLM deployments of the original checkpoint are unaffected.
+
+The plugin logs a warning (once per worker process) when it detects this. Fix it server-side by
+disabling thinking in the template, e.g. for llama.cpp:
+
+```text
+llama-server ... --jinja --chat-template-kwargs '{"enable_thinking":false}'
+```
+
+On recent llama.cpp builds `--reasoning off` or `--reasoning-budget 0` work as well. With
+thinking disabled the quantized model matches the vLLM output; the wrapping is caused by the
+template, not by quantization.
+
 ## License
 
 Released under the MIT license. See [`LICENSE`](LICENSE) for the full text.
