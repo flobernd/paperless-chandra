@@ -1,6 +1,6 @@
 name: Smoke (paperless-ngx)
 
-# Runs inside the real paperless-ngx beta image so we catch API drift in
+# Runs inside the real paperless-ngx image so we catch API drift in
 # the paperless parser-plugin surface that the lightweight unit suite
 # (which never imports Django/paperless) cannot. chandra-ocr and its
 # pure-python dependencies install alongside paperless's pinned packages;
@@ -22,7 +22,7 @@ jobs:
     name: Import + entry-point smoke
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/paperless-ngx/paperless-ngx:beta
+      image: ghcr.io/paperless-ngx/paperless-ngx:latest
       # paperless's s6 entrypoint would try to boot the whole app; we only
       # want a shell to run the smoke script.
       options: --entrypoint /bin/bash

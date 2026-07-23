@@ -8,7 +8,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-# 300 dpi A4. Measured against the paperless-ngx beta image's tesseract OSD:
+# 300 dpi A4. Measured against the paperless-ngx image's tesseract OSD:
 # at 200 dpi even a dozen body lines stayed under paperless's default
 # rotate-pages confidence threshold (12.0); this resolution and line count
 # clears it with margin (~16 on the rotated page) while keeping all the ink

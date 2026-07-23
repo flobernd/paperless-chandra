@@ -16,7 +16,7 @@ Paperless continues to drive `ocrmypdf` exactly as before. Existing OCR configur
 keeps working, and archive PDFs remain PDF/A.
 
 > [!NOTE]
-> Requires paperless-ngx 3.x (currently in beta) with the parser plugin system (the
+> Requires paperless-ngx 3.0 or later with the parser plugin system (the
 > `paperless_ngx.parsers` entry-point group). On older releases the entry point is not discovered
 > and the plugin is silently inactive.
 
@@ -57,7 +57,7 @@ Pick the method that matches your environment:
 ### A. Custom Docker image (recommended)
 
 [`examples/Dockerfile`](examples/Dockerfile) fetches the plugin source from this repository at
-build time, builds the wheel, and layers it onto `ghcr.io/paperless-ngx/paperless-ngx:beta`:
+build time, builds the wheel, and layers it onto `ghcr.io/paperless-ngx/paperless-ngx:latest`:
 
 ```bash
 docker build \
@@ -70,9 +70,10 @@ Build args:
 
 - `PLUGIN_REF` - Git ref to build the plugin from. Use a release tag (`v0.1.0`) for reproducible
   builds; `master` tracks the latest snapshot.
-- `PAPERLESS_TAG` - paperless-ngx base image tag (default `beta`).
+- `PAPERLESS_TAG` - paperless-ngx base image tag (default `latest`). Set a version tag
+  (`3.0`) for reproducible builds.
 
-The result is a drop-in replacement for `ghcr.io/paperless-ngx/paperless-ngx:beta`. Compose
+The result is a drop-in replacement for `ghcr.io/paperless-ngx/paperless-ngx:latest`. Compose
 example: [`examples/docker-compose.vllm.yml`](examples/docker-compose.vllm.yml).
 
 ### B. Bootstrap script (Compose, no custom image)
@@ -258,8 +259,8 @@ Three differences from a Tesseract-driven setup:
 
 ### Plugin is not discovered (no "Loaded third-party parser" log line)
 
-Verify the paperless-ngx image supports the beta parser plugin system (`paperless_ngx.parsers`
-entry-point group). Older images silently ignore plugins. Check that `setup.sh` exited
+Verify the paperless-ngx image supports the parser plugin system (`paperless_ngx.parsers`
+entry-point group). Images older than 3.0 silently ignore plugins. Check that `setup.sh` exited
 successfully (look for "bootstrap complete" in the logs), or that the recipe Dockerfile actually
 installed the plugin (`pip show paperless-chandra` inside the container).
 

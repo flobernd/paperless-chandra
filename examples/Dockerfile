@@ -12,7 +12,7 @@
 #     -t paperless-chandra:latest .
 
 ARG PLUGIN_REF=master
-ARG PAPERLESS_TAG=beta
+ARG PAPERLESS_TAG=latest
 
 # --- Stage 1: build the plugin wheel from source --------------------------
 FROM python:3.12-slim AS plugin
