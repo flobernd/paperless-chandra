@@ -148,22 +148,7 @@ def render_hocr(page: Page) -> str:
     return "\n".join(out)
 
 
-def sidecar_text(page: Page) -> str:
-    """Plain-text rendering: one line of recognised text per OCR line."""
-    return "\n".join(line.text for block in page.blocks for line in block.lines if line.text)
-
-
-def write_document(
-    page: Page,
-    hocr_path: Path,
-    text_path: Path,
-    *,
-    sidecar: str | None = None,
-) -> None:
-    """Write the hOCR document and its plain-text sidecar to disk.
-
-    ``sidecar`` overrides the default per-line rendering when the caller has
-    a better (reading-ordered) text for the same page.
-    """
+def write_document(page: Page, hocr_path: Path, text_path: Path, *, sidecar: str) -> None:
+    """Write the hOCR document and its plain-text sidecar to disk."""
     hocr_path.write_text(render_hocr(page), encoding="utf-8")
-    text_path.write_text(sidecar if sidecar is not None else sidecar_text(page), encoding="utf-8")
+    text_path.write_text(sidecar, encoding="utf-8")

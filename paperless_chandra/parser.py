@@ -45,7 +45,13 @@ from paperless.parsers.utils import (
 )
 from PIL import Image
 
-from paperless_chandra import __version__
+from paperless_chandra import (
+    CONTENT_FORMATS,
+    DEFAULT_CONTENT_FORMAT,
+    DEFAULT_MAX_OUTPUT_TOKENS,
+    DEFAULT_MODEL_NAME,
+    __version__,
+)
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -110,6 +116,11 @@ def _env_choice(name: str, choices: tuple[str, ...], default: str) -> str:
     return raw
 
 
+def _redacted(args: dict[str, Any]) -> dict[str, Any]:
+    """The ocrmypdf kwargs with the bearer token masked for the debug log."""
+    return {k: ("***" if k == "chandra_api_key" else v) for k, v in args.items()}
+
+
 class PaperlessChandraParser:
     """OCR parser using Chandra via ocrmypdf (drop-in for the Tesseract parser)."""
 
@@ -166,19 +177,19 @@ class PaperlessChandraParser:
         self.log = logger
 
         # Plugin-specific env vars, read once per parser instance.
-        self._server_url: str = (os.environ.get("PAPERLESS_CHANDRA_SERVER_URL", "") or "").strip()
+        self._server_url: str = os.environ.get("PAPERLESS_CHANDRA_SERVER_URL", "").strip()
         self._model_name: str = (
-            os.environ.get("PAPERLESS_CHANDRA_MODEL_NAME", "chandra") or ""
-        ).strip() or "chandra"
-        self._api_key: str = (os.environ.get("PAPERLESS_CHANDRA_API_KEY", "") or "").strip()
+            os.environ.get("PAPERLESS_CHANDRA_MODEL_NAME", "").strip() or DEFAULT_MODEL_NAME
+        )
+        self._api_key: str = os.environ.get("PAPERLESS_CHANDRA_API_KEY", "").strip()
         self._max_output_tokens: int = _env_int(
             "PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS",
-            default=12384,
+            default=DEFAULT_MAX_OUTPUT_TOKENS,
         )
         self._content_format: str = _env_choice(
             "PAPERLESS_CHANDRA_CONTENT_FORMAT",
-            choices=("text", "markdown"),
-            default="text",
+            choices=CONTENT_FORMATS,
+            default=DEFAULT_CONTENT_FORMAT,
         )
 
     def __enter__(self) -> Self:
@@ -247,22 +258,14 @@ class PaperlessChandraParser:
     # ------------------------------------------------------------------
 
     def is_image(self, mime_type: str) -> bool:
-        return mime_type in {
-            "image/png",
-            "image/jpeg",
-            "image/tiff",
-            "image/bmp",
-            "image/gif",
-            "image/webp",
-            "image/heic",
-        }
+        return mime_type != "application/pdf" and mime_type in _SUPPORTED_MIME_TYPES
 
     def has_alpha(self, image: Path) -> bool:
         with Image.open(image) as im:
             return im.mode in ("RGBA", "LA")
 
     def remove_alpha(self, image_path: Path) -> Path:
-        no_alpha_image = Path(self.tempdir) / "image-no-alpha"
+        no_alpha_image = self.tempdir / "image-no-alpha"
         run_subprocess(
             [
                 settings.CONVERT_BINARY,
@@ -472,7 +475,7 @@ class PaperlessChandraParser:
         import img2pdf
         import pikepdf
 
-        plain_pdf_path = Path(self.tempdir) / "image_plain.pdf"
+        plain_pdf_path = self.tempdir / "image_plain.pdf"
         try:
             convert_kwargs: dict = {}
             if self.settings.image_dpi is not None:
@@ -487,7 +490,7 @@ class PaperlessChandraParser:
                 f"img2pdf conversion failed for {document_path}: {e!s}",
             ) from e
 
-        pdfa_path = Path(self.tempdir) / "archive.pdf"
+        pdfa_path = self.tempdir / "archive.pdf"
         try:
             with pikepdf.open(plain_pdf_path) as pdf:
                 cs = pdf.make_stream(_SRGB_ICC_DATA)
@@ -529,7 +532,7 @@ class PaperlessChandraParser:
 
         pdfa_part = "2" if output_type == "pdfa" else output_type.split("-")[-1]
 
-        pdfmark = Path(self.tempdir) / "pdfa.ps"
+        pdfmark = self.tempdir / "pdfa.ps"
         generate_pdfa_ps(pdfmark)
 
         color_strategy = self.settings.color_conversion_strategy or "RGB"
@@ -591,6 +594,8 @@ class PaperlessChandraParser:
             produce_archive,
         )
 
+        archive_path = self.tempdir / "archive.pdf"
+
         # --- OCR_MODE=off: never invoke OCR engine ---
         if self.settings.mode == ModeChoices.OFF:
             if not produce_archive:
@@ -612,7 +617,6 @@ class PaperlessChandraParser:
                         f"Image to PDF/A conversion failed: {e!s}",
                     ) from e
                 return
-            archive_path = Path(self.tempdir) / "archive.pdf"
             try:
                 self._convert_pdf_to_pdfa(document_path, archive_path)
                 self.archive_path = archive_path
@@ -632,8 +636,7 @@ class PaperlessChandraParser:
             return
 
         # --- All other paths: run ocrmypdf with Chandra plugin ---
-        archive_path = Path(self.tempdir) / "archive.pdf"
-        sidecar_file = Path(self.tempdir) / "sidecar.txt"
+        sidecar_file = self.tempdir / "sidecar.txt"
 
         skip_text = self.settings.mode == ModeChoices.AUTO and original_has_text
 
@@ -659,8 +662,7 @@ class PaperlessChandraParser:
         )
 
         try:
-            log_args = {k: ("***" if k == "chandra_api_key" else v) for k, v in args.items()}
-            self.log.debug("Calling OCRmyPDF with args: %s", log_args)
+            self.log.debug("Calling OCRmyPDF with args: %s", _redacted(args))
             ocrmypdf.ocr(**args)
 
             if produce_archive:
@@ -687,8 +689,8 @@ class PaperlessChandraParser:
                 e,
             )
 
-            archive_path_fallback = Path(self.tempdir) / "archive-fallback.pdf"
-            sidecar_file_fallback = Path(self.tempdir) / "sidecar-fallback.txt"
+            archive_path_fallback = self.tempdir / "archive-fallback.pdf"
+            sidecar_file_fallback = self.tempdir / "sidecar-fallback.txt"
 
             args = self.construct_ocrmypdf_parameters(
                 document_path,
@@ -699,11 +701,7 @@ class PaperlessChandraParser:
             )
 
             try:
-                log_args = {k: ("***" if k == "chandra_api_key" else v) for k, v in args.items()}
-                self.log.debug(
-                    "Fallback: Calling OCRmyPDF with args: %s",
-                    log_args,
-                )
+                self.log.debug("Fallback: Calling OCRmyPDF with args: %s", _redacted(args))
                 ocrmypdf.ocr(**args)
                 self.text = self.extract_text(
                     sidecar_file_fallback,

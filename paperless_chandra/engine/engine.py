@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import importlib.metadata
 import logging
 from pathlib import Path
@@ -10,17 +11,24 @@ from typing import Any
 from ocrmypdf.pluginspec import OcrEngine, OrientationConfidence
 from PIL import Image
 
+from paperless_chandra import DEFAULT_CONTENT_FORMAT
 from paperless_chandra.engine import blocks, client, deskew, osd, pdf
 from paperless_chandra.engine.hocr import write_document
 
 log = logging.getLogger("paperless.chandra.engine")
 
 
+@functools.cache
 def _chandra_version() -> str:
     try:
         return importlib.metadata.version("chandra-ocr")
     except importlib.metadata.PackageNotFoundError:
         return "unknown"
+
+
+def content_format(options: Any) -> str:
+    """The ``chandra_content_format`` option, trimmed and defaulted."""
+    return (getattr(options, "chandra_content_format", "") or DEFAULT_CONTENT_FORMAT).strip()
 
 
 class ChandraEngine(OcrEngine):
@@ -35,7 +43,7 @@ class ChandraEngine(OcrEngine):
         return f"Chandra {ChandraEngine.version()}"
 
     def __str__(self) -> str:
-        return f"Chandra {ChandraEngine.version()}"
+        return self.creator_tag(None)
 
     @staticmethod
     def languages(options: Any) -> set[str]:
@@ -82,8 +90,7 @@ class ChandraEngine(OcrEngine):
             image.height,
             langs[0] if langs else "eng",
         )
-        content_format = (getattr(options, "chandra_content_format", "") or "text").strip()
-        if content_format == "markdown" and raw:
+        if content_format(options) == "markdown" and raw:
             sidecar = blocks.markdown_sidecar(raw)
         else:
             sidecar = blocks.page_sidecar(page)

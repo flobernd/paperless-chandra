@@ -68,9 +68,3 @@ def test_write_document_sidecar_override(tmp_path):
     write_document(_page(_line()), hocr_path, text_path, sidecar="custom order")
     assert text_path.read_text(encoding="utf-8") == "custom order"
     assert "ocrx_word" in hocr_path.read_text(encoding="utf-8")
-
-
-def test_write_document_default_sidecar_is_line_text(tmp_path):
-    hocr_path, text_path = tmp_path / "p.hocr", tmp_path / "p.txt"
-    write_document(_page(_line()), hocr_path, text_path)
-    assert text_path.read_text(encoding="utf-8") == "hi"

@@ -11,20 +11,22 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 import ocrmypdf
+from ocrmypdf.exceptions import MissingDependencyError
 
-from paperless_chandra.engine.client import (
+from paperless_chandra import (
+    CONTENT_FORMATS,
+    DEFAULT_CONTENT_FORMAT,
     DEFAULT_MAX_OUTPUT_TOKENS,
     DEFAULT_MODEL_NAME,
-    normalize_server_url,
 )
-from paperless_chandra.engine.engine import ChandraEngine
+from paperless_chandra.engine.client import normalize_server_url
+from paperless_chandra.engine.engine import ChandraEngine, content_format
 
 log = logging.getLogger("paperless.chandra.plugin")
-
-_CONTENT_FORMATS = ("text", "markdown")
 
 #: Successful probes per (url, api_key); check_options runs once per
 #: document, and one probe per worker process is enough.
@@ -37,10 +39,6 @@ def _probe_server(server_url: str, api_key: str) -> None:
     Without this, a wrong URL or key surfaces only at first inference,
     deep inside a celery task.
     """
-    from urllib.error import HTTPError, URLError
-
-    from ocrmypdf.exceptions import MissingDependencyError
-
     base = normalize_server_url(server_url)
     cache_key = (base, api_key)
     if cache_key in _PROBED_SERVERS:
@@ -115,8 +113,8 @@ def add_options(parser: Any) -> None:
     )
     chandra.add_argument(
         "--chandra-content-format",
-        choices=list(_CONTENT_FORMATS),
-        default="text",
+        choices=list(CONTENT_FORMATS),
+        default=DEFAULT_CONTENT_FORMAT,
         dest="chandra_content_format",
         help="Document content stored by paperless: plain text (default) or markdown.",
     )
@@ -125,14 +123,12 @@ def add_options(parser: Any) -> None:
 @ocrmypdf.hookimpl
 def check_options(options: Any) -> None:
     """Validate configuration and probe the inference server."""
-    from ocrmypdf.exceptions import MissingDependencyError
-
-    fmt = (getattr(options, "chandra_content_format", "") or "text").strip()
-    if fmt not in _CONTENT_FORMATS:
+    fmt = content_format(options)
+    if fmt not in CONTENT_FORMATS:
         # argparse validates the CLI path via `choices=`; the Python API
         # (ocrmypdf.ocr(chandra_content_format=...)) skips that check.
         raise ValueError(
-            f"Unknown chandra_content_format={fmt!r}. Valid choices: {list(_CONTENT_FORMATS)}."
+            f"Unknown chandra_content_format={fmt!r}. Valid choices: {list(CONTENT_FORMATS)}."
         )
 
     # argparse's `type=int` has no lower bound, and the Python API skips
@@ -141,13 +137,6 @@ def check_options(options: Any) -> None:
     tokens = getattr(options, "chandra_max_output_tokens", None)
     if tokens is not None and tokens < 1:
         raise ValueError(f"chandra_max_output_tokens must be at least 1, got {tokens}.")
-
-    try:
-        import chandra.model.vllm  # noqa: F401
-    except ImportError as e:
-        raise MissingDependencyError(
-            "chandra-ocr is not installed. Install it with: pip install chandra-ocr"
-        ) from e
 
     server_url = (getattr(options, "chandra_server_url", "") or "").strip()
     if not server_url:
