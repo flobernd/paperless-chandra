@@ -108,11 +108,8 @@ def page_from_chunks(chunks: list[dict], width: int, height: int, lang: str) -> 
                 Word(tok, box, CONFIDENCE)
                 for tok, box in zip(tokens, estimate_word_boxes(tokens, line_box), strict=False)
             ]
-            if not words:
-                continue
             lines.append(Line(box=line_box, confidence=CONFIDENCE, text=text, words=words))
-        if lines:
-            page.blocks.append(Block(box=(x0, y0, x1, y1), lines=lines))
+        page.blocks.append(Block(box=(x0, y0, x1, y1), lines=lines))
     return page
 
 

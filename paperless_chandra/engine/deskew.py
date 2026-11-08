@@ -25,8 +25,9 @@ _TARGET_WIDTH = 1200
 
 def _score(img: Image.Image, angle: float) -> float:
     rotated = img.rotate(angle, resample=Image.Resampling.BILINEAR, fillcolor=255)
-    ink = 255 - np.asarray(rotated, dtype=np.int64)
-    profile = ink.sum(axis=1)
+    # Row sums of brightness differ from the ink sums only in sign, so the
+    # squared differences are the same without inverting the page.
+    profile = np.asarray(rotated).sum(axis=1, dtype=np.int64)
     diff = profile[1:] - profile[:-1]
     return float((diff * diff).sum())
 
@@ -41,12 +42,16 @@ def estimate_skew(input_file: Path) -> float:
         # A global mean threshold is enough: the score only needs ink rows to
         # dominate background rows, not a clean segmentation.
         arr = np.asarray(gray)
-        binary = Image.fromarray(np.where(arr < arr.mean(), 0, 255).astype(np.uint8))
+        binary = Image.fromarray(np.where(arr < arr.mean(), np.uint8(0), np.uint8(255)))
 
+    # In both passes i == 0 repeats the current best angle, whose score is
+    # already known.
     best_angle = 0.0
     best_score = _score(binary, 0.0)
     steps = int(MAX_SKEW_DEGREES / _COARSE_STEP)
     for i in range(-steps, steps + 1):
+        if i == 0:
+            continue
         angle = i * _COARSE_STEP
         s = _score(binary, angle)
         if s > best_score:
@@ -54,6 +59,8 @@ def estimate_skew(input_file: Path) -> float:
 
     fine_span = int(_COARSE_STEP / _FINE_STEP)
     for i in range(-fine_span, fine_span + 1):
+        if i == 0:
+            continue
         angle = best_angle + i * _FINE_STEP
         if abs(angle) > MAX_SKEW_DEGREES:
             continue

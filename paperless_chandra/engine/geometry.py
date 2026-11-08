@@ -40,13 +40,13 @@ def estimate_word_boxes(words: Sequence[str], box: BBox) -> list[BBox]:
     line_width = x1 - x0
     weights = [max(1, len(w)) for w in words]
     total = sum(weights) + _GAP_WEIGHT * (len(words) - 1)
-    gap_width = round(line_width * _GAP_WEIGHT / total) if total > 0 else 0
+    gap_width = round(line_width * _GAP_WEIGHT / total)
 
     boxes: list[BBox] = []
     cursor = x0
     last = len(words) - 1
     for i, weight in enumerate(weights):
-        width = round(line_width * weight / total) if total > 0 else 0
+        width = round(line_width * weight / total)
         right = x1 if i == last else cursor + width
         boxes.append((cursor, y0, right, y1))
         cursor = right + gap_width

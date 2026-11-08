@@ -21,10 +21,9 @@ from chandra.model.vllm import generate_vllm
 from chandra.settings import settings as chandra_settings
 from PIL import Image
 
-log = logging.getLogger("paperless.chandra.client")
+from paperless_chandra import DEFAULT_MAX_OUTPUT_TOKENS, DEFAULT_MODEL_NAME
 
-DEFAULT_MODEL_NAME = "chandra"
-DEFAULT_MAX_OUTPUT_TOKENS = 12384
+log = logging.getLogger("paperless.chandra.client")
 
 _SETTINGS_LOCK = threading.Lock()
 
