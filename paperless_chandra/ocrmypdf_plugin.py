@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
-from urllib.error import HTTPError, URLError
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 import ocrmypdf
@@ -48,7 +48,9 @@ def _probe_server(server_url: str, api_key: str) -> None:
     if api_key:
         request.add_header("Authorization", f"Bearer {api_key}")
     try:
-        with urlopen(request, timeout=5):  # noqa: S310
+        # A vLLM server under load answers /models slowly, and the probe runs
+        # once per worker process, so a generous timeout is cheap.
+        with urlopen(request, timeout=30):  # noqa: S310
             pass
     except HTTPError as e:
         if e.code in (401, 403):
@@ -61,9 +63,9 @@ def _probe_server(server_url: str, api_key: str) -> None:
             e.code,
             base,
         )
-    except URLError as e:
+    except OSError as e:
         raise MissingDependencyError(
-            f"The Chandra server at {base} is not reachable ({e.reason}). "
+            f"The Chandra server at {base} is not reachable ({getattr(e, 'reason', e)}). "
             "Check PAPERLESS_CHANDRA_SERVER_URL and that the inference "
             "server container is running."
         ) from e
