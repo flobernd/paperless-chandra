@@ -68,7 +68,7 @@ jobs:
       - name: Install mypy and typed runtime deps
         run: |
           python -m pip install --upgrade pip mypy
-          python -m pip install "ocrmypdf>=17.4" "chandra-ocr>=0.2" "beautifulsoup4>=4.12" numpy
+          python -m pip install "ocrmypdf>=17.4" "chandra-ocr>=0.2,<0.3" "openai>=2.2" "beautifulsoup4>=4.12" numpy
 
       # reviewdog/action-mypy was deleted; reviewdog/action-setup installs the
       # reviewdog CLI, which parses mypy's column output into PR annotations.
@@ -101,7 +101,7 @@ jobs:
       - name: Install ruff, mypy and typed runtime deps
         run: |
           python -m pip install --upgrade pip ruff mypy
-          python -m pip install "ocrmypdf>=17.4" "chandra-ocr>=0.2" "beautifulsoup4>=4.12" numpy
+          python -m pip install "ocrmypdf>=17.4" "chandra-ocr>=0.2,<0.3" "openai>=2.2" "beautifulsoup4>=4.12" numpy
 
       # Mirrors the reviewdog `ruff`/`mypy` jobs (which only annotate PRs)
       # so a direct push to master is gated too. Also gates `ruff format`,

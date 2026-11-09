@@ -187,6 +187,7 @@ standard `PAPERLESS_OCR_*` variables (see
 | `PAPERLESS_CHANDRA_MODEL_NAME` | `chandra` | Served model name the inference server advertises. Matches the vLLM launcher default; override it when your server advertises a different name. |
 | `PAPERLESS_CHANDRA_API_KEY` | *(unset)* | Bearer token for the server. When unset, the vLLM convention `EMPTY` is sent instead. |
 | `PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS` | `12384` | Per-page output token budget passed to the inference server. Lower it to keep slow CPU inference inside the client timeout (see [Troubleshooting](#troubleshooting)). |
+| `PAPERLESS_CHANDRA_TIMEOUT` | `600` | Seconds the plugin waits for one page before the document fails. No retry on a timeout. |
 | `PAPERLESS_CHANDRA_CONTENT_FORMAT` | `text` | `text` or `markdown`. Selects what paperless stores as document content; the invisible PDF text layer underneath is always plain text. |
 | `PAPERLESS_CHANDRA_SCORE` | `15` | Parser-registry priority. Higher scores win when more than one parser claims the same MIME type; the built-in Tesseract parser scores `10`, so the default makes Chandra preferred whenever this plugin is installed. |
 
@@ -237,8 +238,6 @@ Three differences from a Tesseract-driven setup:
   personal use, and startups under $2M in funding or revenue. See
   [datalab.to/pricing](https://www.datalab.to/pricing) for commercial licensing. The plugin code
   itself is MIT.
-- The upstream client has a fixed 600 second request timeout (the OpenAI client default); only
-  very slow CPU inference approaches it.
 - Concurrency is unthrottled: within one paperless worker, ocrmypdf threads may issue parallel
   page requests to the inference server. Remote servers (vLLM in particular) batch these
   efficiently - see [Performance notes](#performance-notes).
@@ -276,8 +275,8 @@ fails fast with an actionable message instead of failing deep inside a Celery ta
 
 ### Slow CPU inference hits the 600 second timeout
 
-Lower `PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS` so generations finish faster, or move to a GPU-backed
-server. See [Performance notes](#performance-notes).
+Raise `PAPERLESS_CHANDRA_TIMEOUT`, lower `PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS` so generations
+finish faster, or move to a GPU-backed server. See [Performance notes](#performance-notes).
 
 ### Server rejects requests with "model not found"
 

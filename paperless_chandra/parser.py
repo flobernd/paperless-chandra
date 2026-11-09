@@ -50,6 +50,7 @@ from paperless_chandra import (
     DEFAULT_CONTENT_FORMAT,
     DEFAULT_MAX_OUTPUT_TOKENS,
     DEFAULT_MODEL_NAME,
+    DEFAULT_TIMEOUT_SECONDS,
     __version__,
 )
 
@@ -186,6 +187,7 @@ class PaperlessChandraParser:
             "PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS",
             default=DEFAULT_MAX_OUTPUT_TOKENS,
         )
+        self._timeout: int = _env_int("PAPERLESS_CHANDRA_TIMEOUT", default=DEFAULT_TIMEOUT_SECONDS)
         self._content_format: str = _env_choice(
             "PAPERLESS_CHANDRA_CONTENT_FORMAT",
             choices=CONTENT_FORMATS,
@@ -369,6 +371,7 @@ class PaperlessChandraParser:
             "chandra_model_name": self._model_name,
             "chandra_api_key": self._api_key,
             "chandra_max_output_tokens": self._max_output_tokens,
+            "chandra_timeout": self._timeout,
             "chandra_content_format": self._content_format,
         }
 

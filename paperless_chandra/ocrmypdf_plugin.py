@@ -22,6 +22,7 @@ from paperless_chandra import (
     DEFAULT_CONTENT_FORMAT,
     DEFAULT_MAX_OUTPUT_TOKENS,
     DEFAULT_MODEL_NAME,
+    DEFAULT_TIMEOUT_SECONDS,
 )
 from paperless_chandra.engine.client import ChandraClientError, normalize_server_url
 from paperless_chandra.engine.engine import ChandraEngine, content_format
@@ -114,6 +115,15 @@ def add_options(parser: Any) -> None:
         help=f"Per-page output token budget (default: {DEFAULT_MAX_OUTPUT_TOKENS}).",
     )
     chandra.add_argument(
+        "--chandra-timeout",
+        type=int,
+        default=DEFAULT_TIMEOUT_SECONDS,
+        dest="chandra_timeout",
+        metavar="SECONDS",
+        help=f"Seconds to wait for one page before the document fails (default: "
+        f"{DEFAULT_TIMEOUT_SECONDS}).",
+    )
+    chandra.add_argument(
         "--chandra-content-format",
         choices=list(CONTENT_FORMATS),
         default=DEFAULT_CONTENT_FORMAT,
@@ -135,10 +145,11 @@ def check_options(options: Any) -> None:
 
     # argparse's `type=int` has no lower bound, and the Python API skips
     # argparse entirely, so a non-positive value would otherwise only
-    # surface per-page inside generate_vllm.
-    tokens = getattr(options, "chandra_max_output_tokens", None)
-    if tokens is not None and tokens < 1:
-        raise ValueError(f"chandra_max_output_tokens must be at least 1, got {tokens}.")
+    # surface per page, as a server error or an instant timeout.
+    for name in ("chandra_max_output_tokens", "chandra_timeout"):
+        value = getattr(options, name, None)
+        if value is not None and value < 1:
+            raise ValueError(f"{name} must be at least 1, got {value}.")
 
     server_url = (getattr(options, "chandra_server_url", "") or "").strip()
     try:
