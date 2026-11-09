@@ -145,9 +145,9 @@ def check_options(options: Any) -> None:
 
     # argparse's `type=int` has no lower bound, and the Python API skips
     # argparse entirely. Without this check the client quietly replaces
-    # zero with the default, and a negative value fails each page with a
-    # misleading error: a rejected request for the budget, "not reachable"
-    # for the timeout.
+    # zero with the default, reports a negative timeout as "not
+    # reachable", and sends a negative budget to the server unchanged,
+    # where servers disagree on what it means.
     for name in ("chandra_max_output_tokens", "chandra_timeout"):
         value = getattr(options, name, None)
         if value is not None and value < 1:
