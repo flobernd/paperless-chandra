@@ -23,7 +23,7 @@ from paperless_chandra import (
     DEFAULT_MAX_OUTPUT_TOKENS,
     DEFAULT_MODEL_NAME,
 )
-from paperless_chandra.engine.client import normalize_server_url
+from paperless_chandra.engine.client import ChandraClientError, normalize_server_url
 from paperless_chandra.engine.engine import ChandraEngine, content_format
 
 log = logging.getLogger("paperless.chandra.plugin")
@@ -141,13 +141,10 @@ def check_options(options: Any) -> None:
         raise ValueError(f"chandra_max_output_tokens must be at least 1, got {tokens}.")
 
     server_url = (getattr(options, "chandra_server_url", "") or "").strip()
-    if not server_url:
-        raise MissingDependencyError(
-            "paperless-chandra requires --chandra-server-url (or the "
-            "PAPERLESS_CHANDRA_SERVER_URL env var) to point at an "
-            "OpenAI-compatible server hosting Chandra."
-        )
-    _probe_server(server_url, (getattr(options, "chandra_api_key", "") or "").strip())
+    try:
+        _probe_server(server_url, (getattr(options, "chandra_api_key", "") or "").strip())
+    except ChandraClientError as e:
+        raise MissingDependencyError(str(e)) from e
 
 
 @ocrmypdf.hookimpl(tryfirst=True)
