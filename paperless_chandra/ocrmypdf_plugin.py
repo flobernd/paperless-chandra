@@ -24,7 +24,11 @@ from paperless_chandra import (
     DEFAULT_MODEL_NAME,
     DEFAULT_TIMEOUT_SECONDS,
 )
-from paperless_chandra.engine.client import ChandraClientError, normalize_server_url
+from paperless_chandra.engine.client import (
+    ChandraClientError,
+    normalize_server_url,
+    resolve_api_key,
+)
 from paperless_chandra.engine.engine import ChandraEngine, content_format
 
 log = logging.getLogger("paperless.chandra.plugin")
@@ -75,11 +79,10 @@ def _probe_server(server_url: str, api_key: str) -> None:
 
 @ocrmypdf.hookimpl
 def add_options(parser: Any) -> None:
-    """Register ``--chandra-*`` CLI args so they're accepted as kwargs.
+    """Register the ``--chandra-*`` arguments of the ocrmypdf command line.
 
-    ocrmypdf validates kwargs against its argparse parser; these must be
-    registered before ``ocrmypdf.ocr(chandra_server_url=...)`` is called
-    from the paperless parser.
+    The Python API stores an unknown keyword such as ``chandra_server_url``
+    without checking it against these arguments.
     """
     chandra = parser.add_argument_group("Chandra", "Options for the Chandra OCR engine")
     chandra.add_argument(
@@ -155,7 +158,7 @@ def check_options(options: Any) -> None:
 
     server_url = (getattr(options, "chandra_server_url", "") or "").strip()
     try:
-        _probe_server(server_url, (getattr(options, "chandra_api_key", "") or "").strip())
+        _probe_server(server_url, resolve_api_key(options))
     except ChandraClientError as e:
         raise MissingDependencyError(str(e)) from e
 

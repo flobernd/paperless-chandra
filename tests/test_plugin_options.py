@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import urllib.error
 from types import SimpleNamespace
@@ -48,6 +49,20 @@ def test_check_options_requires_server_url(monkeypatch):
     monkeypatch.setattr(ocrmypdf_plugin, "_probe_server", ocrmypdf_plugin._probe_server.__wrapped__)  # type: ignore[attr-defined]
     with pytest.raises(MissingDependencyError, match="PAPERLESS_CHANDRA_SERVER_URL"):
         ocrmypdf_plugin.check_options(_options(chandra_server_url="  "))
+
+
+def test_preflight_sends_the_environment_key_when_the_option_is_empty(monkeypatch):
+    monkeypatch.setattr(ocrmypdf_plugin, "_probe_server", ocrmypdf_plugin._probe_server.__wrapped__)  # type: ignore[attr-defined]
+    monkeypatch.setenv("PAPERLESS_CHANDRA_API_KEY", "from-env")
+    sent = []
+
+    def capture(request, timeout):
+        sent.append(request)
+        return contextlib.nullcontext()
+
+    monkeypatch.setattr(ocrmypdf_plugin, "urlopen", capture)
+    ocrmypdf_plugin.check_options(_options(chandra_api_key=""))
+    assert sent[0].get_header("Authorization") == "Bearer from-env"
 
 
 def test_check_options_rejects_unknown_content_format():
