@@ -78,7 +78,7 @@ def test_render_drops_xml_invalid_characters_from_words():
 
 def test_clean_text_keeps_whitespace_and_non_ascii_characters():
     # The sidecar separates its lines and blocks with newlines.
-    text = "a\tb\r\nc \ufb01 \U0001f600"
+    text = "a\tb\r\nc 日 \ufb01 \U0001f600"
     assert clean_text(text) == text
 
 
@@ -101,5 +101,10 @@ def test_render_gives_a_zero_width_box_one_pixel():
 def test_render_keeps_one_pixel_for_a_box_past_the_right_edge():
     # estimate_word_boxes can place the last of six one-character words at
     # (1202, 10, 1200, 30) inside a line box that ends at the page edge.
-    page = _page(_line(box=(1201, 10, 1202, 30)), width=1200, height=1600)
+    page = _page(_line(box=(1202, 10, 1200, 30)), width=1200, height=1600)
     assert 'title="bbox 1199 10 1200 30' in render_hocr(page)
+
+
+def test_render_keeps_one_pixel_for_a_box_below_the_bottom_edge():
+    page = _page(_line(box=(10, 1601, 20, 1700)), width=1200, height=1600)
+    assert 'title="bbox 10 1599 20 1600' in render_hocr(page)
