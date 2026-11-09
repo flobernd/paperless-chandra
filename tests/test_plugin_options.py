@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import urllib.error
 from types import SimpleNamespace
 
@@ -75,3 +76,22 @@ def test_probe_maps_unreachable_server(monkeypatch):
     ocrmypdf_plugin._PROBED_SERVERS.clear()
     with pytest.raises(MissingDependencyError, match="not reachable"):
         ocrmypdf_plugin._probe_server.__wrapped__("http://host:1", "")  # type: ignore[attr-defined]
+
+
+def test_probe_maps_a_socket_error_without_reason(monkeypatch):
+    def raise_timeout(request, timeout):
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(ocrmypdf_plugin, "urlopen", raise_timeout)
+    with pytest.raises(MissingDependencyError, match="not reachable"):
+        ocrmypdf_plugin._probe_server.__wrapped__("http://gpu:8000", "")  # type: ignore[attr-defined]
+
+
+def test_probe_continues_on_a_server_error(monkeypatch, caplog):
+    def raise_500(request, timeout):
+        raise urllib.error.HTTPError("http://gpu:8000/v1/models", 500, "boom", {}, None)
+
+    monkeypatch.setattr(ocrmypdf_plugin, "urlopen", raise_500)
+    with caplog.at_level(logging.WARNING):
+        ocrmypdf_plugin._probe_server.__wrapped__("http://gpu:8000", "")  # type: ignore[attr-defined]
+    assert "HTTP 500" in caplog.text
