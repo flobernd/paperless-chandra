@@ -9,6 +9,7 @@ test in CI.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
 
 import numpy as np
@@ -32,6 +33,18 @@ def _score(img: Image.Image, angle: float) -> float:
     return float((diff * diff).sum())
 
 
+def _best(
+    img: Image.Image, angles: Iterable[float], best_angle: float, best_score: float
+) -> tuple[float, float]:
+    # A blank page scores the same at every angle, and the strict > keeps its
+    # seed of 0.0 instead of drifting to the last candidate.
+    for angle in angles:
+        s = _score(img, angle)
+        if s > best_score:
+            best_angle, best_score = angle, s
+    return best_angle, best_score
+
+
 def estimate_skew(input_file: Path) -> float:
     """Degrees to rotate counterclockwise so text lines run horizontally."""
     with Image.open(input_file) as raw:
@@ -44,29 +57,19 @@ def estimate_skew(input_file: Path) -> float:
         arr = np.asarray(gray)
         binary = Image.fromarray(np.where(arr < arr.mean(), np.uint8(0), np.uint8(255)))
 
-    # In both passes i == 0 repeats the current best angle, whose score is
-    # already known.
-    best_angle = 0.0
-    best_score = _score(binary, 0.0)
+    # The fine window is centered on the coarse winner, so each tenth inside
+    # its cell is scored once. i == 0 is the incumbent in both lists, and its
+    # score is already known.
     steps = int(MAX_SKEW_DEGREES / _COARSE_STEP)
-    for i in range(-steps, steps + 1):
-        if i == 0:
-            continue
-        angle = i * _COARSE_STEP
-        s = _score(binary, angle)
-        if s > best_score:
-            best_angle, best_score = angle, s
+    coarse = [i * _COARSE_STEP for i in range(-steps, steps + 1) if i != 0]
+    best_angle, best_score = _best(binary, coarse, 0.0, _score(binary, 0.0))
 
     fine_span = int(_COARSE_STEP / _FINE_STEP)
-    for i in range(-fine_span, fine_span + 1):
-        if i == 0:
-            continue
-        angle = best_angle + i * _FINE_STEP
-        if abs(angle) > MAX_SKEW_DEGREES:
-            continue
-        s = _score(binary, angle)
-        if s > best_score:
-            best_angle, best_score = angle, s
+    fine = [
+        round(best_angle + i * _FINE_STEP, 1) for i in range(-fine_span + 1, fine_span) if i != 0
+    ]
+    fine = [angle for angle in fine if abs(angle) <= MAX_SKEW_DEGREES]
+    best_angle, _ = _best(binary, fine, best_angle, best_score)
 
     # A best fit at the search boundary means the true angle is outside the
     # range; rotating by the clamped value would make things worse.

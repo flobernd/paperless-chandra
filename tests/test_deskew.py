@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from PIL import Image, ImageDraw
 
 from paperless_chandra.engine.deskew import estimate_skew
@@ -29,3 +30,9 @@ def test_skewed_page_reports_correction_angle(tmp_path):
     # returns the counterclockwise correction, so the sign inverts.
     est = estimate_skew(_bar_page(tmp_path, 2.0))
     assert abs(est + 2.0) <= 0.5
+
+
+def test_fine_pass_finds_the_true_angle_inside_the_coarse_cell(tmp_path):
+    # The correction 1.3 lies between the coarse candidates 1.0 and 1.5, so the
+    # fine pass has to score every tenth of that cell to find it.
+    assert estimate_skew(_bar_page(tmp_path, -1.3)) == pytest.approx(1.3, abs=0.05)
