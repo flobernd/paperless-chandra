@@ -2,34 +2,33 @@
 
 from __future__ import annotations
 
+from xml.etree import ElementTree
+
+from paperless_chandra.engine.geometry import BBox
 from paperless_chandra.engine.hocr import (
     Block,
     Line,
     Page,
     Word,
+    clean_text,
     render_hocr,
     to_hocr_lang,
     write_document,
 )
 
 
-def _page(line: Line) -> Page:
+def _page(line: Line, *, width: int = 400, height: int = 300) -> Page:
     return Page(
-        width=400,
-        height=300,
+        width=width,
+        height=height,
         lang="eng",
         ocr_system="test",
         blocks=[Block(box=line.box, lines=[line])],
     )
 
 
-def _line() -> Line:
-    return Line(
-        box=(10, 10, 90, 40),
-        confidence=88,
-        text="hi",
-        words=[Word("hi", (10, 10, 90, 40), 88)],
-    )
+def _line(*, text: str = "hi", box: BBox = (10, 10, 90, 40)) -> Line:
+    return Line(box=box, confidence=88, text=text, words=[Word(text, box, 88)])
 
 
 def test_to_hocr_lang_passes_iso_codes_through():
@@ -68,3 +67,39 @@ def test_write_document_sidecar_override(tmp_path):
     write_document(_page(_line()), hocr_path, text_path, sidecar="custom order")
     assert text_path.read_text(encoding="utf-8") == "custom order"
     assert "ocrx_word" in hocr_path.read_text(encoding="utf-8")
+
+
+def test_render_drops_xml_invalid_characters_from_words():
+    # ocrmypdf's hOCR parser rejects a NUL, and a lone surrogate cannot be encoded as UTF-8.
+    hocr = render_hocr(_page(_line(text="in\x00voice\ud800")))
+    ElementTree.fromstring(hocr.encode("utf-8"))
+    assert "invoice" in hocr and "\x00" not in hocr
+
+
+def test_clean_text_keeps_whitespace_and_non_ascii_characters():
+    # The sidecar separates its lines and blocks with newlines.
+    text = "a\tb\r\nc \ufb01 \U0001f600"
+    assert clean_text(text) == text
+
+
+def test_write_document_cleans_the_sidecar(tmp_path):
+    write_document(_page(_line()), tmp_path / "p.hocr", tmp_path / "p.txt", sidecar="a\x00b")
+    assert (tmp_path / "p.txt").read_text(encoding="utf-8") == "ab"
+
+
+def test_render_clamps_a_box_outside_the_page():
+    hocr = render_hocr(_page(_line(box=(-5, -5, 1300, 40)), width=1200, height=1600))
+    assert 'title="bbox 0 0 1200 40' in hocr
+    assert "1300" not in hocr
+
+
+def test_render_gives_a_zero_width_box_one_pixel():
+    page = _page(_line(box=(50, 10, 50, 30)))
+    assert 'title="bbox 50 10 51 30' in render_hocr(page)
+
+
+def test_render_keeps_one_pixel_for_a_box_past_the_right_edge():
+    # estimate_word_boxes can place the last of six one-character words at
+    # (1202, 10, 1200, 30) inside a line box that ends at the page edge.
+    page = _page(_line(box=(1201, 10, 1202, 30)), width=1200, height=1600)
+    assert 'title="bbox 1199 10 1200 30' in render_hocr(page)
