@@ -42,8 +42,10 @@ def test_check_options_accepts_valid_configuration():
     ocrmypdf_plugin.check_options(_options())
 
 
-def test_check_options_requires_server_url():
-    with pytest.raises(MissingDependencyError):
+def test_check_options_requires_server_url(monkeypatch):
+    # The real probe rejects a blank URL before it builds a request.
+    monkeypatch.setattr(ocrmypdf_plugin, "_probe_server", ocrmypdf_plugin._probe_server.__wrapped__)  # type: ignore[attr-defined]
+    with pytest.raises(MissingDependencyError, match="PAPERLESS_CHANDRA_SERVER_URL"):
         ocrmypdf_plugin.check_options(_options(chandra_server_url="  "))
 
 
