@@ -42,23 +42,16 @@ class Word:
 
 @dataclass
 class Line:
-    """A reading line: its box, its words, and its fitted baseline.
+    """A reading line: its box, its confidence and its words.
 
-    ``text`` is the canonical recognised text for the sidecar. It is kept
-    separate from ``words`` because some engines return an authoritative
-    line transcription whose spacing differs from a naive word join.
-
-    ``baseline`` is ``(slope, constant)`` in hOCR-relative form: ``slope``
-    is the baseline gradient and ``constant`` is its y at the line box's
-    left edge, measured up from the line box bottom. The default
-    ``(0.0, 0.0)`` is a flat baseline on the box bottom.
+    The words carry the text. A Chandra reading line has one space between
+    its words, so the sidecar gets the line back by joining them with one
+    space.
     """
 
     box: BBox
     confidence: int
-    text: str
     words: list[Word] = field(default_factory=list)
-    baseline: tuple[float, float] = (0.0, 0.0)
 
 
 @dataclass
@@ -112,11 +105,6 @@ def _bbox(box: BBox, page: Page) -> str:
     return f"bbox {x0} {y0} {x1} {y1}"
 
 
-def _baseline(line: Line) -> str:
-    slope, constant = line.baseline
-    return f"baseline {slope:.6f} {constant:.0f}"
-
-
 def render_hocr(page: Page) -> str:
     """Serialise a :class:`Page` to an hOCR/XHTML string.
 
@@ -151,9 +139,11 @@ def render_hocr(page: Page) -> str:
         )
         for line in block.lines:
             line_no += 1
+            # The baseline sits flat on the line box bottom because Chandra
+            # reports no geometry finer than a block box.
             out.append(
                 f'<span class="ocr_line" id="line_{line_no}" '
-                f'title="{_bbox(line.box, page)}; {_baseline(line)}; '
+                f'title="{_bbox(line.box, page)}; baseline 0.000000 0; '
                 f'x_wconf {line.confidence}">',
             )
             last = len(line.words) - 1

@@ -108,16 +108,18 @@ def page_from_chunks(chunks: list[dict], width: int, height: int, lang: str) -> 
                 Word(tok, box, CONFIDENCE)
                 for tok, box in zip(tokens, estimate_word_boxes(tokens, line_box), strict=False)
             ]
-            lines.append(Line(box=line_box, confidence=CONFIDENCE, text=text, words=words))
+            lines.append(Line(box=line_box, confidence=CONFIDENCE, words=words))
         page.blocks.append(Block(box=(x0, y0, x1, y1), lines=lines))
     return page
 
 
 def page_sidecar(page: Page) -> str:
     """Plain-text sidecar: lines per block, blank line between blocks."""
-    return "\n\n".join(
-        "\n".join(line.text for line in block.lines if line.text) for block in page.blocks
+    blocks = (
+        (" ".join(word.text for word in line.words) for line in block.lines)
+        for block in page.blocks
     )
+    return "\n\n".join("\n".join(text for text in lines if text) for lines in blocks)
 
 
 def markdown_sidecar(raw_html: str) -> str:
