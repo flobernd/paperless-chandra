@@ -185,7 +185,7 @@ standard `PAPERLESS_OCR_*` variables (see
 | --- | --- | --- |
 | `PAPERLESS_CHANDRA_SERVER_URL` | *(required)* | URL of the OpenAI-compatible inference server hosting Chandra, for example `http://gpu-host:8000`. The `/v1` suffix is appended automatically when missing. |
 | `PAPERLESS_CHANDRA_MODEL_NAME` | `chandra` | Served model name the inference server advertises. Matches the vLLM launcher default; override it when your server advertises a different name. |
-| `PAPERLESS_CHANDRA_API_KEY` | *(unset)* | Bearer token for the server. When unset, the vLLM convention `EMPTY` is sent instead. |
+| `PAPERLESS_CHANDRA_API_KEY` | *(unset)* | Bearer token for the server. The engine reads it from the environment, so the key never travels in the ocrmypdf options that paperless writes to its debug log. A `chandra_api_key` in `PAPERLESS_OCR_USER_ARGS` is ignored with a warning. When unset, the vLLM convention `EMPTY` is sent instead. |
 | `PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS` | `12384` | Per-page output token budget passed to the inference server. A page whose output reaches the budget is cut off, and the document fails (see [Troubleshooting](#a-page-hits-the-output-token-budget)). |
 | `PAPERLESS_CHANDRA_TIMEOUT` | `600` | Seconds each wait for data from the server may last before the document fails. The value is no limit for the whole request, so a gateway that sends bytes at intervals can keep a request open for longer. No retry on a timeout. |
 | `PAPERLESS_CHANDRA_CONTENT_FORMAT` | `text` | `text` or `markdown`. Selects what paperless stores as document content; the invisible PDF text layer underneath is always plain text. |
@@ -228,6 +228,13 @@ Three differences from a Tesseract-driven setup:
   orientation probe; Chandra still performs all text recognition. The tesseract binary and
   `osd.traineddata` ship in the official paperless-ngx image. If they are missing (custom
   images), the plugin logs one warning and pages keep their stored orientation.
+
+The plugin declares itself a remote service, so `PAPERLESS_REMOTE_OCR_MODE` (paperless-ngx 3.1 and
+later) decides which documents reach Chandra. With the default `always`, every supported document
+goes to Chandra. With `workflow_only`, documents go to the built-in Tesseract parser unless a
+workflow with the "Remote OCR" action and a "Consumption Started" trigger matches them. The
+"Reprocess" action can then send a single document to Chandra. paperless-ngx 3.0 has no such
+setting and sends every supported document to Chandra.
 
 ## Limitations
 
