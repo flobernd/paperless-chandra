@@ -33,6 +33,13 @@ log = logging.getLogger("paperless.chandra.client")
 _CONNECTION_RETRIES = 2
 _REPEAT_RETRIES = 2
 
+_THINKING_HINT = (
+    "The inference server is likely applying a thinking-enabled chat "
+    "template (chandra-ocr-2 GGUF conversions embed one). Restart "
+    "llama-server with --chat-template-kwargs '{\"enable_thinking\":false}' "
+    "so the OCR output is returned as regular message content."
+)
+
 #: Warn about a thinking-wrapped response once per process, not once per page.
 _think_warned = False
 
@@ -63,13 +70,7 @@ def _warn_thinking_response(reason: str) -> None:
     """
     global _think_warned
     if not _think_warned:
-        log.warning(
-            "%s. The inference server is likely applying a thinking-enabled chat "
-            "template (chandra-ocr-2 GGUF conversions embed one). Restart "
-            "llama-server with --chat-template-kwargs '{\"enable_thinking\":false}' "
-            "so the OCR output is returned as regular message content.",
-            reason,
-        )
+        log.warning("%s. %s", reason, _THINKING_HINT)
         _think_warned = True
     else:
         log.debug("%s (thinking-template warning already emitted).", reason)
@@ -117,6 +118,10 @@ def request_settings(options: Any) -> RequestSettings:
         ),
         timeout=int(getattr(options, "chandra_timeout", 0) or 0) or DEFAULT_TIMEOUT_SECONDS,
     )
+
+
+def _has_unclosed_think(raw: str) -> bool:
+    return "<think>" in raw and "</think>" not in raw
 
 
 def _is_repeat_loop(raw: str) -> bool:
@@ -221,15 +226,20 @@ def ocr_image(image: Image.Image, options: Any) -> str:
             log.info("Chandra output repeats, retrying at temperature %.1f.", temperature)
             continue
         if choice.finish_reason == "length":
-            raise ChandraClientError(
+            message = (
                 f"Chandra's output for the page hit the budget of {settings.max_tokens} "
                 "tokens and was cut off. The plugin retries a detected repetition loop "
                 "twice before it raises this error. Raise PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS "
                 "when the page holds more text than the budget allows."
             )
+            # A thinking template spends the budget on reasoning, and a larger
+            # budget only delays the same failure.
+            if not raw.strip() or _has_unclosed_think(raw):
+                message += f" The output is empty or an unclosed <think> block. {_THINKING_HINT}"
+            raise ChandraClientError(message)
         break
 
-    if "<think>" in raw and "</think>" not in raw:
+    if _has_unclosed_think(raw):
         _warn_thinking_response("Chandra returned OCR output inside an unclosed <think> block")
     elif not raw.strip() and token_count:
         _warn_thinking_response(

@@ -120,8 +120,8 @@ def add_options(parser: Any) -> None:
         default=DEFAULT_TIMEOUT_SECONDS,
         dest="chandra_timeout",
         metavar="SECONDS",
-        help=f"Seconds to wait for one page before the document fails (default: "
-        f"{DEFAULT_TIMEOUT_SECONDS}).",
+        help=f"Seconds to wait for one request to the server before the document fails "
+        f"(default: {DEFAULT_TIMEOUT_SECONDS}).",
     )
     chandra.add_argument(
         "--chandra-content-format",
@@ -144,8 +144,10 @@ def check_options(options: Any) -> None:
         )
 
     # argparse's `type=int` has no lower bound, and the Python API skips
-    # argparse entirely, so a non-positive value would otherwise only
-    # surface per page, as a server error or an instant timeout.
+    # argparse entirely. Without this check the client quietly replaces
+    # zero with the default, and a negative value fails each page with a
+    # misleading error: a rejected request for the budget, "not reachable"
+    # for the timeout.
     for name in ("chandra_max_output_tokens", "chandra_timeout"):
         value = getattr(options, name, None)
         if value is not None and value < 1:

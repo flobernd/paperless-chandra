@@ -171,6 +171,20 @@ def test_length_finish_fails_and_names_the_budget(fake):
         ocr_image(_image(), _options())
 
 
+@pytest.mark.parametrize("content", [None, "<think>\nThe image shows an invoice."])
+def test_thinking_output_at_the_budget_carries_the_template_hint(fake, content):
+    fake.script([_completion(content, finish_reason="length", tokens=12384)])
+    with pytest.raises(ChandraClientError, match="enable_thinking"):
+        ocr_image(_image(), _options())
+
+
+def test_plain_truncation_carries_no_template_hint(fake):
+    fake.script([_completion("<div>partial", finish_reason="length", tokens=12384)])
+    with pytest.raises(ChandraClientError) as excinfo:
+        ocr_image(_image(), _options())
+    assert "enable_thinking" not in str(excinfo.value)
+
+
 def test_unauthorized_names_the_api_key_variable(fake):
     fake.script([_status_error(401)])
     with pytest.raises(ChandraClientError, match="PAPERLESS_CHANDRA_API_KEY"):
@@ -191,8 +205,10 @@ def test_not_found_names_the_model_variable(fake):
 
 def test_bad_request_carries_the_server_message(fake):
     fake.script([_status_error(400, "max_tokens is too large")])
-    with pytest.raises(ChandraClientError, match="max_tokens is too large"):
+    with pytest.raises(ChandraClientError) as excinfo:
         ocr_image(_image(), _options())
+    assert "max_tokens is too large" in str(excinfo.value)
+    assert "PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS" in str(excinfo.value)
 
 
 def test_other_status_carries_the_status_and_the_server_message(fake):
@@ -239,9 +255,11 @@ def test_loop_after_two_retries_returns_the_last_page(fake):
     assert ocr_image(_image(), _options()) == last
 
 
-def test_api_key_option_wins_over_the_environment(monkeypatch):
+def test_api_key_option_wins_over_the_environment(fake, monkeypatch):
     monkeypatch.setenv("PAPERLESS_CHANDRA_API_KEY", "from-env")
-    assert resolve_api_key(_options(chandra_api_key=" sekrit ")) == "sekrit"
+    fake.script([_completion("x")])
+    ocr_image(_image(), _options(chandra_api_key=" sekrit "))
+    assert fake.init_kwargs["api_key"] == "sekrit"
 
 
 def test_api_key_falls_back_to_the_environment(monkeypatch):
