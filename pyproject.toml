@@ -29,7 +29,8 @@ classifiers = [
 ]
 dependencies = [
     "ocrmypdf>=17.4",
-    "chandra-ocr>=0.2",
+    "chandra-ocr>=0.2,<0.3",
+    "openai>=2.2",
     "beautifulsoup4>=4.12",
     "numpy>=1.26",
     "pillow>=10",

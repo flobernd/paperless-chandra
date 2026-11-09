@@ -1,11 +1,14 @@
-"""Client wrapper: URL normalisation, settings application, error mapping."""
+"""Page request: SDK wiring, retry policy, error mapping."""
 
 from __future__ import annotations
 
 import logging
 from types import SimpleNamespace
 
+import httpx
 import pytest
+from chandra.prompts import PROMPT_MAPPING
+from openai import APIConnectionError, APIStatusError, APITimeoutError
 from PIL import Image
 
 from paperless_chandra.engine import client
@@ -13,7 +16,11 @@ from paperless_chandra.engine.client import (
     ChandraClientError,
     normalize_server_url,
     ocr_image,
+    resolve_api_key,
 )
+
+# Ends in a closing tag, so only the library's cut_from_end check flags it.
+_LOOPED = "<p>" + "la " * 400 + "</p>"
 
 
 def _options(**overrides):
@@ -31,11 +38,52 @@ def _image():
     return Image.new("RGB", (100, 100), "white")
 
 
-class _Result:
-    def __init__(self, raw="<div></div>", error=False, token_count=7):
-        self.raw = raw
-        self.error = error
-        self.token_count = token_count
+def _completion(content, finish_reason="stop", tokens=5, usage=True):
+    return SimpleNamespace(
+        choices=[
+            SimpleNamespace(finish_reason=finish_reason, message=SimpleNamespace(content=content))
+        ],
+        usage=SimpleNamespace(completion_tokens=tokens) if usage else None,
+    )
+
+
+def _request():
+    return httpx.Request("POST", "http://gpu:8000/v1/chat/completions")
+
+
+def _status_error(status, message="error"):
+    return APIStatusError(message, response=httpx.Response(status, request=_request()), body=None)
+
+
+class _FakeOpenAI:
+    """Stands in for the OpenAI client class: records the request, replays a script."""
+
+    def __init__(self):
+        self.init_kwargs = {}
+        self.calls = []
+        self._script = []
+        self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
+
+    def script(self, items):
+        self._script = list(items)
+
+    def __call__(self, **kwargs):
+        self.init_kwargs = kwargs
+        return self
+
+    def _create(self, **kwargs):
+        self.calls.append(kwargs)
+        item = self._script.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+
+@pytest.fixture
+def fake(monkeypatch):
+    sdk = _FakeOpenAI()
+    monkeypatch.setattr(client, "OpenAI", sdk)
+    return sdk
 
 
 @pytest.fixture(autouse=True)
@@ -45,8 +93,10 @@ def _reset_think_warned():
     client._think_warned = False
 
 
-def test_normalize_appends_v1():
-    assert normalize_server_url("http://host:8000") == "http://host:8000/v1"
+def test_server_url_gains_the_v1_suffix(fake):
+    fake.script([_completion("x")])
+    ocr_image(_image(), _options(chandra_server_url="http://ocr-host:8000"))
+    assert fake.init_kwargs["base_url"] == "http://ocr-host:8000/v1"
 
 
 def test_normalize_keeps_existing_version_suffix():
@@ -58,64 +108,159 @@ def test_normalize_rejects_empty():
         normalize_server_url("   ")
 
 
-def test_ocr_image_sends_layout_prompt_and_returns_raw(monkeypatch):
-    captured = {}
-
-    def fake_generate(batch, max_output_tokens=None, vllm_api_base=None, **kwargs):
-        captured["batch"] = batch
-        captured["max_output_tokens"] = max_output_tokens
-        captured["vllm_api_base"] = vllm_api_base
-        return [_Result(raw="<div>ok</div>")]
-
-    monkeypatch.setattr(client, "generate_vllm", fake_generate)
-    raw = ocr_image(_image(), _options())
-    assert raw == "<div>ok</div>"
-    assert captured["batch"][0].prompt_type == "ocr_layout"
-    assert captured["max_output_tokens"] == 12384
-    assert captured["vllm_api_base"] == "http://ocr-host:8000/v1"
+def test_sends_the_layout_prompt_with_the_page_image(fake):
+    fake.script([_completion("<div>ok</div>")])
+    assert ocr_image(_image(), _options()) == "<div>ok</div>"
+    content = fake.calls[0]["messages"][0]["content"]
+    assert content[1]["text"] == PROMPT_MAPPING["ocr_layout"]
+    assert content[0]["image_url"]["url"].startswith("data:image/png;base64,")
 
 
-def test_ocr_image_applies_model_and_key_to_chandra_settings(monkeypatch):
-    from chandra.settings import settings as chandra_settings
-
-    monkeypatch.setattr(client, "generate_vllm", lambda *a, **k: [_Result()])
-    ocr_image(_image(), _options(chandra_model_name="custom", chandra_api_key="sekrit"))
-    assert chandra_settings.VLLM_MODEL_NAME == "custom"
-    assert chandra_settings.VLLM_API_KEY == "sekrit"
+def test_request_carries_the_configured_model_and_budget(fake):
+    fake.script([_completion("x")])
+    ocr_image(_image(), _options(chandra_model_name="chandra-2", chandra_max_output_tokens=2048))
+    assert fake.calls[0]["model"] == "chandra-2"
+    assert fake.calls[0]["max_tokens"] == 2048
 
 
-def test_ocr_image_defaults_api_key_to_vllm_convention(monkeypatch):
-    from chandra.settings import settings as chandra_settings
-
-    monkeypatch.setattr(client, "generate_vllm", lambda *a, **k: [_Result()])
-    ocr_image(_image(), _options(chandra_api_key=""))
-    assert chandra_settings.VLLM_API_KEY == "EMPTY"
+def test_client_carries_the_timeout_and_no_sdk_retries(fake):
+    fake.script([_completion("x")])
+    ocr_image(_image(), _options(chandra_timeout=42))
+    assert fake.init_kwargs["timeout"] == 42 and fake.init_kwargs["max_retries"] == 0
 
 
-def test_ocr_image_raises_on_error_flag(monkeypatch):
-    monkeypatch.setattr(client, "generate_vllm", lambda *a, **k: [_Result(error=True)])
-    with pytest.raises(ChandraClientError):
+def test_timeout_fails_once_and_names_the_variable(fake):
+    fake.script([APITimeoutError(request=_request())])
+    with pytest.raises(ChandraClientError, match="PAPERLESS_CHANDRA_TIMEOUT"):
+        ocr_image(_image(), _options())
+    assert len(fake.calls) == 1
+
+
+def test_connection_error_retries_twice_then_fails(fake, monkeypatch):
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    fake.script([APIConnectionError(request=_request())] * 3)
+    with pytest.raises(ChandraClientError, match="not reachable"):
+        ocr_image(_image(), _options())
+    assert len(fake.calls) == 3
+
+
+def test_connection_error_then_success_returns_the_page(fake, monkeypatch):
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    fake.script([APIConnectionError(request=_request()), _completion("<div>ok</div>")])
+    assert ocr_image(_image(), _options()) == "<div>ok</div>"
+
+
+def test_connection_retries_span_the_whole_page(fake, monkeypatch):
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    fake.script(
+        [
+            APIConnectionError(request=_request()),
+            APIConnectionError(request=_request()),
+            _completion(_LOOPED),
+            APIConnectionError(request=_request()),
+        ]
+    )
+    with pytest.raises(ChandraClientError, match="not reachable"):
+        ocr_image(_image(), _options())
+    assert len(fake.calls) == 4
+
+
+def test_length_finish_fails_and_names_the_budget(fake):
+    fake.script([_completion("<div>partial", finish_reason="length", tokens=12384)])
+    with pytest.raises(ChandraClientError, match="PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS"):
         ocr_image(_image(), _options())
 
 
-def test_ocr_image_raises_on_empty_result_list(monkeypatch):
-    monkeypatch.setattr(client, "generate_vllm", lambda *a, **k: [])
-    with pytest.raises(ChandraClientError):
+def test_unauthorized_names_the_api_key_variable(fake):
+    fake.script([_status_error(401)])
+    with pytest.raises(ChandraClientError, match="PAPERLESS_CHANDRA_API_KEY"):
         ocr_image(_image(), _options())
 
 
-def test_ocr_image_returns_empty_string_for_empty_raw(monkeypatch):
-    monkeypatch.setattr(client, "generate_vllm", lambda *a, **k: [_Result(raw="")])
-    assert ocr_image(_image(), _options()) == ""
+def test_forbidden_names_the_api_key_variable(fake):
+    fake.script([_status_error(403)])
+    with pytest.raises(ChandraClientError, match="PAPERLESS_CHANDRA_API_KEY"):
+        ocr_image(_image(), _options())
+
+
+def test_not_found_names_the_model_variable(fake):
+    fake.script([_status_error(404)])
+    with pytest.raises(ChandraClientError, match="PAPERLESS_CHANDRA_MODEL_NAME"):
+        ocr_image(_image(), _options())
+
+
+def test_bad_request_carries_the_server_message(fake):
+    fake.script([_status_error(400, "max_tokens is too large")])
+    with pytest.raises(ChandraClientError, match="max_tokens is too large"):
+        ocr_image(_image(), _options())
+
+
+def test_other_status_carries_the_status_and_the_server_message(fake):
+    fake.script([_status_error(503, "engine overloaded")])
+    with pytest.raises(ChandraClientError, match="503.*engine overloaded"):
+        ocr_image(_image(), _options())
+
+
+def test_null_content_with_tokens_is_empty_and_warns(fake, caplog):
+    fake.script([_completion(None, tokens=534)])
+    with caplog.at_level(logging.WARNING):
+        assert ocr_image(_image(), _options()) == ""
+    assert "enable_thinking" in caplog.text
+
+
+def test_missing_usage_block_counts_zero_tokens(fake, caplog):
+    fake.script([_completion("", usage=False)])
+    with caplog.at_level(logging.WARNING):
+        assert ocr_image(_image(), _options()) == ""
+    assert caplog.text == ""
+
+
+def test_repeat_loop_retries_with_a_higher_temperature(fake):
+    fake.script([_completion(_LOOPED), _completion("<div>ok</div>")])
+    assert ocr_image(_image(), _options()) == "<div>ok</div>"
+    assert fake.calls[1]["temperature"] > fake.calls[0]["temperature"]
+
+
+def test_loop_cut_at_the_budget_is_retried(fake):
+    fake.script([_completion(_LOOPED, finish_reason="length"), _completion("<div>ok</div>")])
+    assert ocr_image(_image(), _options()) == "<div>ok</div>"
+
+
+def test_loop_at_the_budget_after_two_retries_fails(fake):
+    fake.script([_completion(_LOOPED, finish_reason="length")] * 3)
+    with pytest.raises(ChandraClientError, match="PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS"):
+        ocr_image(_image(), _options())
+    assert len(fake.calls) == 3
+
+
+def test_loop_after_two_retries_returns_the_last_page(fake):
+    last = "<p>" + "lo " * 400 + "</p>"
+    fake.script([_completion(_LOOPED), _completion(_LOOPED), _completion(last)])
+    assert ocr_image(_image(), _options()) == last
+
+
+def test_api_key_option_wins_over_the_environment(monkeypatch):
+    monkeypatch.setenv("PAPERLESS_CHANDRA_API_KEY", "from-env")
+    assert resolve_api_key(_options(chandra_api_key=" sekrit ")) == "sekrit"
+
+
+def test_api_key_falls_back_to_the_environment(monkeypatch):
+    monkeypatch.setenv("PAPERLESS_CHANDRA_API_KEY", " sekrit ")
+    assert resolve_api_key(_options(chandra_api_key="")) == "sekrit"
+
+
+def test_api_key_defaults_to_the_vllm_convention(monkeypatch):
+    monkeypatch.delenv("PAPERLESS_CHANDRA_API_KEY", raising=False)
+    assert resolve_api_key(_options(chandra_api_key="")) == "EMPTY"
 
 
 def _warning_records(caplog):
     return [r for r in caplog.records if r.levelno >= logging.WARNING]
 
 
-def test_unclosed_think_block_warns_with_enable_thinking_hint(monkeypatch, caplog):
+def test_unclosed_think_block_warns_with_enable_thinking_hint(fake, caplog):
     raw = "<think>\nThe image shows an invoice.\n<div data-label='Text'>hi</div>"
-    monkeypatch.setattr(client, "generate_vllm", lambda *a, **k: [_Result(raw=raw)])
+    fake.script([_completion(raw)])
     with caplog.at_level(logging.WARNING):
         assert ocr_image(_image(), _options()) == raw
     warnings = _warning_records(caplog)
@@ -123,45 +268,16 @@ def test_unclosed_think_block_warns_with_enable_thinking_hint(monkeypatch, caplo
     assert "enable_thinking" in warnings[0].getMessage()
 
 
-def test_empty_content_with_generated_tokens_warns(monkeypatch, caplog):
-    monkeypatch.setattr(client, "generate_vllm", lambda *a, **k: [_Result(raw="", token_count=534)])
-    with caplog.at_level(logging.WARNING):
-        assert ocr_image(_image(), _options()) == ""
-    warnings = _warning_records(caplog)
-    assert len(warnings) == 1
-    assert "enable_thinking" in warnings[0].getMessage()
-
-
-def test_empty_content_without_generated_tokens_is_silent(monkeypatch, caplog):
-    monkeypatch.setattr(client, "generate_vllm", lambda *a, **k: [_Result(raw="", token_count=0)])
-    with caplog.at_level(logging.WARNING):
-        ocr_image(_image(), _options())
-    assert not _warning_records(caplog)
-
-
-def test_closed_think_block_is_silent(monkeypatch, caplog):
+def test_closed_think_block_is_silent(fake, caplog):
     raw = "<think>\nplan\n</think>\n<div data-label='Text'>hi</div>"
-    monkeypatch.setattr(client, "generate_vllm", lambda *a, **k: [_Result(raw=raw)])
+    fake.script([_completion(raw)])
     with caplog.at_level(logging.WARNING):
         assert ocr_image(_image(), _options()) == raw
     assert not _warning_records(caplog)
 
 
-def test_normal_output_is_silent(monkeypatch, caplog):
-    monkeypatch.setattr(client, "generate_vllm", lambda *a, **k: [_Result(raw="<div>ok</div>")])
-    with caplog.at_level(logging.WARNING):
-        ocr_image(_image(), _options())
-    assert not _warning_records(caplog)
-
-
-def test_think_warning_fires_once_across_both_kinds(monkeypatch, caplog):
-    results = iter(
-        [
-            [_Result(raw="<think>\n<div>hi</div>")],
-            [_Result(raw="", token_count=99)],
-        ]
-    )
-    monkeypatch.setattr(client, "generate_vllm", lambda *a, **k: next(results))
+def test_think_warning_fires_once_across_both_kinds(fake, caplog):
+    fake.script([_completion("<think>\n<div>hi</div>"), _completion("", tokens=99)])
     with caplog.at_level(logging.WARNING):
         ocr_image(_image(), _options())
         ocr_image(_image(), _options())

@@ -20,6 +20,7 @@ def _options(**overrides):
         "chandra_api_key": "",
         "chandra_max_output_tokens": 12384,
         "chandra_content_format": "text",
+        "chandra_timeout": 600,
     }
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
@@ -58,6 +59,12 @@ def test_check_options_rejects_unknown_content_format():
 def test_check_options_rejects_non_positive_max_output_tokens(tokens):
     with pytest.raises(ValueError):
         ocrmypdf_plugin.check_options(_options(chandra_max_output_tokens=tokens))
+
+
+@pytest.mark.parametrize("timeout", [0, -1])
+def test_check_options_rejects_non_positive_timeout(timeout):
+    with pytest.raises(ValueError):
+        ocrmypdf_plugin.check_options(_options(chandra_timeout=timeout))
 
 
 def test_probe_maps_auth_failure(monkeypatch):
