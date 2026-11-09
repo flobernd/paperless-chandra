@@ -57,7 +57,6 @@ def test_page_synthesises_lines_and_words():
     page = page_from_chunks([_chunk()], 1000, 1000, "eng")
     assert len(page.blocks) == 1
     line = page.blocks[0].lines[0]
-    assert line.text == "hello world"
     assert [w.text for w in line.words] == ["hello", "world"]
     assert line.box == (100, 100, 500, 200)
     assert all(w.confidence == 95 for w in line.words)
@@ -81,7 +80,7 @@ def test_non_text_labels_are_skipped():
     ]
     page = page_from_chunks(chunks, 1000, 1000, "eng")
     assert len(page.blocks) == 1
-    assert page.blocks[0].lines[0].text == "kept"
+    assert [w.text for w in page.blocks[0].lines[0].words] == ["kept"]
 
 
 def test_unknown_labels_are_kept():

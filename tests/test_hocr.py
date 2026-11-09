@@ -28,7 +28,7 @@ def _page(line: Line, *, width: int = 400, height: int = 300) -> Page:
 
 
 def _line(*, text: str = "hi", box: BBox = (10, 10, 90, 40)) -> Line:
-    return Line(box=box, confidence=88, text=text, words=[Word(text, box, 88)])
+    return Line(box=box, confidence=88, words=[Word(text, box, 88)])
 
 
 def test_to_hocr_lang_passes_iso_codes_through():
@@ -56,7 +56,6 @@ def test_render_hocr_escapes_text():
     line = Line(
         box=(0, 0, 50, 10),
         confidence=90,
-        text="<b>&",
         words=[Word("<b>&", (0, 0, 50, 10), 90)],
     )
     assert "&lt;b&gt;&amp;" in render_hocr(_page(line))
