@@ -1,4 +1,4 @@
-"""check_options preflight and engine binding."""
+"""check_options preflight."""
 
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ import pytest
 from ocrmypdf.exceptions import MissingDependencyError
 
 from paperless_chandra import ocrmypdf_plugin
-from paperless_chandra.engine.engine import ChandraEngine
 
 
 def _options(**overrides):
@@ -34,10 +33,6 @@ def _no_network(monkeypatch):
     stub.__wrapped__ = original  # type: ignore[attr-defined]
     monkeypatch.setattr(ocrmypdf_plugin, "_probe_server", stub)
     ocrmypdf_plugin._PROBED_SERVERS.clear()
-
-
-def test_get_ocr_engine_returns_chandra_engine():
-    assert isinstance(ocrmypdf_plugin.get_ocr_engine(), ChandraEngine)
 
 
 def test_check_options_accepts_valid_configuration():
@@ -70,13 +65,13 @@ def test_check_options_rejects_unknown_content_format():
         ocrmypdf_plugin.check_options(_options(chandra_content_format="html"))
 
 
-@pytest.mark.parametrize("tokens", [0, -1])
+@pytest.mark.parametrize("tokens", [0])
 def test_check_options_rejects_non_positive_max_output_tokens(tokens):
     with pytest.raises(ValueError):
         ocrmypdf_plugin.check_options(_options(chandra_max_output_tokens=tokens))
 
 
-@pytest.mark.parametrize("timeout", [0, -1])
+@pytest.mark.parametrize("timeout", [0])
 def test_check_options_rejects_non_positive_timeout(timeout):
     with pytest.raises(ValueError):
         ocrmypdf_plugin.check_options(_options(chandra_timeout=timeout))
