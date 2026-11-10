@@ -186,7 +186,7 @@ standard `PAPERLESS_OCR_*` variables (see
 | `PAPERLESS_CHANDRA_SERVER_URL` | *(required)* | URL of the OpenAI-compatible inference server hosting Chandra, for example `http://gpu-host:8000`. The `/v1` suffix is appended automatically when missing. |
 | `PAPERLESS_CHANDRA_MODEL_NAME` | `chandra` | Served model name the inference server advertises. Matches the vLLM launcher default; override it when your server advertises a different name. |
 | `PAPERLESS_CHANDRA_API_KEY` | *(unset)* | Bearer token for the server. When unset, the vLLM convention `EMPTY` is sent instead. |
-| `PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS` | `12384` | Per-page output token budget passed to the inference server. Lower it to keep slow CPU inference inside the client timeout (see [Troubleshooting](#troubleshooting)). |
+| `PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS` | `12384` | Per-page output token budget passed to the inference server. A page whose output reaches the budget is cut off, and the document fails (see [Troubleshooting](#a-page-hits-the-output-token-budget)). |
 | `PAPERLESS_CHANDRA_TIMEOUT` | `600` | Seconds the plugin waits for one request to the server before the document fails. No retry on a timeout. |
 | `PAPERLESS_CHANDRA_CONTENT_FORMAT` | `text` | `text` or `markdown`. Selects what paperless stores as document content; the invisible PDF text layer underneath is always plain text. |
 | `PAPERLESS_CHANDRA_SCORE` | `15` | Parser-registry priority. Higher scores win when more than one parser claims the same MIME type; the built-in Tesseract parser scores `10`, so the default makes Chandra preferred whenever this plugin is installed. |
@@ -275,8 +275,31 @@ fails fast with an actionable message instead of failing deep inside a Celery ta
 
 ### Slow CPU inference hits the 600 second timeout
 
-Raise `PAPERLESS_CHANDRA_TIMEOUT`, lower `PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS` so generations
-finish faster, or move to a GPU-backed server. See [Performance notes](#performance-notes).
+Raise `PAPERLESS_CHANDRA_TIMEOUT`, or move to a GPU-backed server. See
+[Performance notes](#performance-notes).
+
+Each paperless task worker sends up to `PAPERLESS_THREADS_PER_WORKER` pages of its document to the
+server at once. A server that works through one request at a time queues the rest, so a page's wait
+includes the pages ahead of it. A timeout fails the document with no retry.
+
+Lower `PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS` only for a generation that repeats itself until the
+timeout. The plugin can retry a repetition loop only after the server returns the output, and a
+lower budget makes the server return it sooner. A page with more text than the lower budget then
+fails with the [budget error](#a-page-hits-the-output-token-budget).
+
+### A page hits the output token budget
+
+The error "Chandra's output for the page hit the budget of N tokens and was cut off" means the
+server stopped generating the page's text at `PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS`. A cut-off page
+lacks the end of its text, so the plugin fails the document. A repetition loop runs into the budget
+too, and the plugin retries a detected loop twice at a higher temperature before it raises the
+error. The error covers two more causes:
+
+- The page holds more text than the budget allows. Raise `PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS`.
+- The server applies a thinking-enabled chat template, which spends the budget on reasoning. The
+  error then says that the output is empty or an unclosed `<think>` block. A larger budget only
+  delays the same failure, so disable thinking on the server. See
+  [the GGUF entry](#documents-come-back-with-empty-text-when-served-from-a-gguf-llamacpp-ollama-lm-studio).
 
 ### Server rejects requests with "model not found"
 
