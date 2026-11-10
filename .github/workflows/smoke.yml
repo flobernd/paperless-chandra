@@ -14,6 +14,10 @@ on:
   # stack runs too. The push trigger keeps its filter, so such a branch
   # does not run twice.
   pull_request:
+  # The job runs against :latest, so a weekly run catches a paperless-ngx
+  # release that breaks the plugin while this repository sees no push.
+  schedule:
+    - cron: "17 4 * * 1"
   workflow_dispatch:
 
 permissions:
@@ -46,15 +50,35 @@ jobs:
         run: |
           "${{ steps.py.outputs.bin }}" -m pip install --break-system-packages .
 
+      # The smoke test constructs the parser, and OcrConfig() reads the
+      # application configuration from the database.
+      - name: Migrate the SQLite database
+        env:
+          PYTHONPATH: /usr/src/paperless/src
+          DJANGO_SETTINGS_MODULE: paperless.settings
+          PAPERLESS_REDIS: redis://localhost:6379
+          PAPERLESS_DBENGINE: sqlite
+          PAPERLESS_SECRET_KEY: smoke-test-not-a-real-secret
+          # django-treenode's post_migrate handler reads the Django cache,
+          # which is Redis by default, and the job runs no Redis.
+          PAPERLESS_CACHE_BACKEND: django.core.cache.backends.locmem.LocMemCache
+          PAPERLESS_DATA_DIR: /tmp/paperless-data
+        run: |
+          mkdir -p /tmp/paperless-data
+          "${{ steps.py.outputs.bin }}" /usr/src/paperless/src/manage.py migrate --noinput
+
       - name: Run smoke test
         env:
           PYTHONPATH: /usr/src/paperless/src
           DJANGO_SETTINGS_MODULE: paperless.settings
-          # Minimal settings so `django.setup()` / settings import does not
-          # require live services. paperless.settings reads these with
-          # sensible fallbacks; no DB/Redis connection happens at import.
+          # Settings so the smoke test runs without live services. The parser
+          # reads the SQLite database that the migration step created, and the
+          # in-process cache keeps Redis out.
           PAPERLESS_REDIS: redis://localhost:6379
           PAPERLESS_DBENGINE: sqlite
           PAPERLESS_SECRET_KEY: smoke-test-not-a-real-secret
+          PAPERLESS_CACHE_BACKEND: django.core.cache.backends.locmem.LocMemCache
+          PAPERLESS_DATA_DIR: /tmp/paperless-data
+          PAPERLESS_OCR_LANGUAGE: eng
         run: |
           "${{ steps.py.outputs.bin }}" tests/smoke_paperless.py
