@@ -48,8 +48,8 @@ def _probe_server(server_url: str, api_key: str) -> None:
     if api_key:
         request.add_header("Authorization", f"Bearer {api_key}")
     try:
-        # A vLLM server under load answers /models slowly, and the probe runs
-        # once per worker process, so a generous timeout is cheap.
+        # A vLLM server under load answers /models slowly. A successful probe
+        # is cached per worker process, so a slow server costs the wait once.
         with urlopen(request, timeout=30):  # noqa: S310
             pass
     except HTTPError as e:
