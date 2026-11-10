@@ -229,12 +229,14 @@ Three differences from a Tesseract-driven setup:
   `osd.traineddata` ship in the official paperless-ngx image. If they are missing (custom
   images), the plugin logs one warning and pages keep their stored orientation.
 
-The plugin declares itself a remote service, so `PAPERLESS_REMOTE_OCR_MODE` (paperless-ngx 3.1 and
-later) decides which documents reach Chandra. With the default `always`, every supported document
-goes to Chandra. With `workflow_only`, documents go to the built-in Tesseract parser unless a
-workflow with the "Remote OCR" action and a "Consumption Started" trigger matches them. The
-"Reprocess" action can then send a single document to Chandra. paperless-ngx 3.0 has no such
-setting and sends every supported document to Chandra.
+Chandra declares itself a remote service, so `PAPERLESS_REMOTE_OCR_MODE` applies to it. The
+setting exists from paperless-ngx 3.1, and a mode set in the application configuration overrides
+the variable. The default `always` changes nothing. With `workflow_only`, paperless-ngx gives a
+document that is not marked for remote OCR to a local parser. The "Remote OCR" workflow action and
+the "Use remote OCR" option of "Reprocess" mark a document, and the UI shows them only when
+paperless-ngx's own remote engine (Azure AI) is configured. Without that engine, the REST API is
+the way to mark a document. That engine scores 20, so when it is configured, Chandra needs
+`PAPERLESS_CHANDRA_SCORE` of 20 or more to take a marked document of a type both support.
 
 ## Limitations
 

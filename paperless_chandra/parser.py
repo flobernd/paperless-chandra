@@ -51,7 +51,7 @@ logger = logging.getLogger("paperless.parsing.chandra")
 
 _BUILDER_HOOK_MISSING: Final[str] = (
     "paperless-ngx's RasterisedDocumentParser no longer defines "
-    "construct_ocrmypdf_parameters; paperless-chandra cannot attach its engine"
+    "construct_ocrmypdf_parameters, so paperless-chandra cannot attach its engine"
 )
 
 # The registry logs a module that fails to import, skips it and lets
