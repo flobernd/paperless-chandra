@@ -136,7 +136,8 @@ class PaperlessChandraParser(RasterisedDocumentParser):
     ) -> int | None:
         if mime_type not in cls.supported_mime_types():
             return None
-        # Default 15 beats Tesseract's 10 - once installed, Chandra wins.
+        # The default 15 beats Tesseract's 10, but not the 20 of paperless-ngx's
+        # own remote engine when that engine is configured.
         return _env_int("PAPERLESS_CHANDRA_SCORE", default=15)
 
     def __init__(self, logging_group: object | None = None) -> None:
