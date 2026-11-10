@@ -4,7 +4,7 @@ name: Smoke (paperless-ngx)
 # the paperless parser-plugin surface that the lightweight unit suite
 # (which never imports Django/paperless) cannot. chandra-ocr and its
 # pure-python dependencies install alongside paperless's pinned packages.
-# The smoke test exercises import wiring, entry-point discovery and one
+# The smoke test exercises entry-point discovery, import wiring and one
 # page through the pipeline against an in-process stub server.
 
 on:
