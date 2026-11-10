@@ -134,13 +134,18 @@ def _is_repeat_loop(raw: str) -> bool:
     )
 
 
+def rejected_key_message(url: str, status: int) -> str:
+    """Error text for a refused key, shared by the preflight probe and the page request."""
+    return (
+        f"The Chandra server at {url} rejected the API key (HTTP {status}). "
+        "Check PAPERLESS_CHANDRA_API_KEY against the server configuration."
+    )
+
+
 def _status_error(error: APIStatusError, settings: RequestSettings) -> ChandraClientError:
     status = error.status_code
     if status in (401, 403):
-        return ChandraClientError(
-            f"The Chandra server at {settings.url} rejected the API key (HTTP {status}). "
-            "Check PAPERLESS_CHANDRA_API_KEY against the server configuration."
-        )
+        return ChandraClientError(rejected_key_message(settings.url, status))
     if status == 404:
         return ChandraClientError(
             f"The Chandra server at {settings.url} does not serve the model "

@@ -132,12 +132,12 @@ def render_hocr(page: Page) -> str:
     word_no = 0
     line_no = 0
     for block_no, block in enumerate(page.blocks, start=1):
+        block_bbox = _bbox(block.box, page)
         out.append(
-            f'<div class="ocr_carea" id="carea_{block_no}" title="{_bbox(block.box, page)}">',
+            f'<div class="ocr_carea" id="carea_{block_no}" title="{block_bbox}">',
         )
         out.append(
-            f'<p class="ocr_par" id="par_{block_no}" lang="{lang}" '
-            f'title="{_bbox(block.box, page)}">',
+            f'<p class="ocr_par" id="par_{block_no}" lang="{lang}" title="{block_bbox}">',
         )
         for line in block.lines:
             line_no += 1

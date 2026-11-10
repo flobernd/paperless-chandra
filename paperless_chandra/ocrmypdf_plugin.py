@@ -27,6 +27,7 @@ from paperless_chandra import (
 from paperless_chandra.engine.client import (
     ChandraClientError,
     normalize_server_url,
+    rejected_key_message,
     resolve_api_key,
 )
 from paperless_chandra.engine.engine import ChandraEngine, content_format
@@ -50,8 +51,7 @@ def _probe_server(server_url: str, api_key: str) -> None:
         return
 
     request = Request(f"{base}/models")  # noqa: S310 - operator-configured URL
-    if api_key:
-        request.add_header("Authorization", f"Bearer {api_key}")
+    request.add_header("Authorization", f"Bearer {api_key}")
     try:
         # A vLLM server under load answers /models slowly. A successful probe
         # is cached per worker process, so a slow server costs the wait once.
@@ -59,10 +59,7 @@ def _probe_server(server_url: str, api_key: str) -> None:
             pass
     except HTTPError as e:
         if e.code in (401, 403):
-            raise MissingDependencyError(
-                f"The Chandra server at {base} rejected the API key (HTTP {e.code}). "
-                "Check PAPERLESS_CHANDRA_API_KEY against the server configuration."
-            ) from e
+            raise MissingDependencyError(rejected_key_message(base, e.code)) from e
         log.warning(
             "Chandra server preflight got HTTP %d from %s/models; continuing.",
             e.code,
