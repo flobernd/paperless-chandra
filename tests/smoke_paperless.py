@@ -59,8 +59,8 @@ def check_plugin_wiring() -> None:
 
 
 def check_parser_imports() -> None:
-    # Importing this module exercises every `from documents...` /
-    # `from paperless...` import against the real paperless-ngx install.
+    # Importing this module exercises every `from paperless...` import
+    # against the real paperless-ngx install.
     import django
 
     django.setup()
