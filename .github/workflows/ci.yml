@@ -127,10 +127,12 @@ jobs:
         with:
           python-version: "3.12"
 
+      # tests/test_client.py builds the SDK's errors from httpx requests and
+      # responses, and openai 3 depends on httpx2 in place of httpx.
       - name: Install runtime + test deps
         run: |
           python -m pip install --upgrade pip
-          python -m pip install . pytest pikepdf
+          python -m pip install . httpx pikepdf pytest
 
       - name: Run pytest
         run: pytest tests/ -q
