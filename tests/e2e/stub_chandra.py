@@ -8,6 +8,7 @@ looks for STUB_MARKER in the ingested document's content.
 from __future__ import annotations
 
 import json
+import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 STUB_MARKER = "PAPERLESS CHANDRA STUB OK"
@@ -58,6 +59,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):  # quiet: compose logs stay readable
         pass
+
+
+def serve_in_thread() -> tuple[HTTPServer, int]:
+    """Serve on an ephemeral loopback port and return the server with its port.
+
+    The thread is a daemon, so a caller that exits on a failed check does
+    not wait for ``serve_forever`` to return.
+    """
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, server.server_address[1]
 
 
 if __name__ == "__main__":
