@@ -16,7 +16,8 @@ the failure modes the lightweight unit suite cannot:
   Chandra plugin once, no API key and the user's ``chandra_*`` values.
 * one page goes through the parser, ocrmypdf and the plugin to a stub
   server and comes back as text in both content formats and as an archive
-  PDF, and a stopped server fails the parse with its URL.
+  PDF, and a server that is down at the probe or stops after it fails the
+  parse with its URL.
 
 Exit code is non-zero on the first failed check so callers fail loudly.
 """
@@ -166,6 +167,7 @@ def check_document_run() -> None:
     from e2e.make_test_page import write_page
     from e2e.stub_chandra import STUB_MARKER, serve_in_thread
 
+    from paperless_chandra.engine.client import ChandraClientError
     from paperless_chandra.parser import PaperlessChandraParser
 
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -198,6 +200,20 @@ def check_document_run() -> None:
         finally:
             server.shutdown()
             server.server_close()
+
+        # The probe of the stub's URL succeeded above and stays cached, so this
+        # run gets past check_options and fails on the page request.
+        with mock.patch.dict(os.environ, stub_url), PaperlessChandraParser() as parser:
+            try:
+                parser.parse(png, "image/png")
+            except ParseError as e:
+                if not isinstance(e.__cause__, ChandraClientError):
+                    _fail(f"the parse should fail on the page request, got {e!r}")
+                if f"127.0.0.1:{port}" not in str(e):
+                    _fail(f"the ParseError should name the server, got {e}")
+            else:
+                _fail("parse() should raise ParseError when the server stops after the probe")
+        _ok("a page request to a stopped server fails the parse with a ParseError that names it")
 
         # Port 9 belongs to the discard service, which nothing runs here.
         stopped_url = {"PAPERLESS_CHANDRA_SERVER_URL": "http://127.0.0.1:9"}
