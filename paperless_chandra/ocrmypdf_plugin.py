@@ -120,8 +120,8 @@ def add_options(parser: Any) -> None:
         default=DEFAULT_TIMEOUT_SECONDS,
         dest="chandra_timeout",
         metavar="SECONDS",
-        help=f"Seconds to wait for one request to the server before the document fails "
-        f"(default: {DEFAULT_TIMEOUT_SECONDS}).",
+        help=f"Seconds each wait for data from the server may last before the document fails, "
+        f"and no limit for the whole request (default: {DEFAULT_TIMEOUT_SECONDS}).",
     )
     chandra.add_argument(
         "--chandra-content-format",
