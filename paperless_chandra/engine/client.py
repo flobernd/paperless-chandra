@@ -217,7 +217,16 @@ def ocr_image(image: Image.Image, options: Any) -> str:
         except APIStatusError as e:
             raise _status_error(e, settings) from e
 
-        choice = completion.choices[0]
+        # The SDK does not validate a 200 body: an HTML page arrives as a str,
+        # and a JSON body without choices as a completion whose choices are None.
+        choices = getattr(completion, "choices", None)
+        if not choices:
+            raise ChandraClientError(
+                f"The Chandra server at {settings.url} answered without a chat completion. "
+                "Check that PAPERLESS_CHANDRA_SERVER_URL points at an OpenAI-compatible "
+                "inference server."
+            )
+        choice = choices[0]
         raw = choice.message.content or ""
         token_count = completion.usage.completion_tokens if completion.usage else 0
         # A loop at temperature 0 usually runs into the budget, so the loop

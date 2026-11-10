@@ -217,6 +217,22 @@ def test_other_status_carries_the_status_and_the_server_message(fake):
         ocr_image(_image(), _options())
 
 
+# What the SDK returns for a 200 answer whose body is no chat completion.
+@pytest.mark.parametrize(
+    "answer",
+    [
+        SimpleNamespace(choices=[], usage=SimpleNamespace(completion_tokens=0)),
+        SimpleNamespace(choices=None, usage=None),
+        "<html><body>welcome</body></html>",
+    ],
+    ids=["empty-choices", "null-choices", "html-body"],
+)
+def test_answer_without_a_choice_names_the_server_url(fake, answer):
+    fake.script([answer])
+    with pytest.raises(ChandraClientError, match="PAPERLESS_CHANDRA_SERVER_URL"):
+        ocr_image(_image(), _options())
+
+
 def test_null_content_with_tokens_is_empty_and_warns(fake, caplog):
     fake.script([_completion(None, tokens=534)])
     with caplog.at_level(logging.WARNING):
