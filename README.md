@@ -189,7 +189,7 @@ standard `PAPERLESS_OCR_*` variables (see
 | `PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS` | `12384` | Per-page output token budget passed to the inference server. A page whose output reaches the budget is cut off, and the document fails (see [Troubleshooting](#a-page-hits-the-output-token-budget)). |
 | `PAPERLESS_CHANDRA_TIMEOUT` | `600` | Seconds each wait for data from the server may last before the document fails. The value is no limit for the whole request, so a gateway that sends bytes at intervals can keep a request open for longer. No retry on a timeout. |
 | `PAPERLESS_CHANDRA_CONTENT_FORMAT` | `text` | `text` or `markdown`. Selects what paperless stores as document content; the invisible PDF text layer underneath is always plain text. |
-| `PAPERLESS_CHANDRA_SCORE` | `15` | Parser-registry priority. Higher scores win when more than one parser claims the same MIME type; the built-in Tesseract parser scores `10`, so the default makes Chandra preferred whenever this plugin is installed. |
+| `PAPERLESS_CHANDRA_SCORE` | `15` | Parser-registry priority. Higher scores win when more than one parser claims the same MIME type. The built-in Tesseract parser scores `10`, so the default makes Chandra preferred over it. paperless-ngx's own remote engine scores `20` when it is configured, and then wins over the default for the types both support (see [Honoured paperless-ngx settings](#honoured-paperless-ngx-settings)). |
 
 > [!NOTE]
 > `markdown` mode only changes the sidecar and stored document content; the invisible PDF text
@@ -236,7 +236,8 @@ document that is not marked for remote OCR to a local parser. The "Remote OCR" w
 the "Use remote OCR" option of "Reprocess" mark a document, and the UI shows them only when
 paperless-ngx's own remote engine (Azure AI) is configured. Without that engine, the REST API is
 the way to mark a document. That engine scores 20, so when it is configured, Chandra needs
-`PAPERLESS_CHANDRA_SCORE` of 20 or more to take a marked document of a type both support.
+`PAPERLESS_CHANDRA_SCORE` of 20 or more to take any document of a type both support under `always`,
+and any marked one under `workflow_only`.
 
 ## Limitations
 
