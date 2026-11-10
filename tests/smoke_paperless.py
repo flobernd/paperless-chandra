@@ -5,13 +5,13 @@ with the real paperless-ngx runtime on ``PYTHONPATH``. Its job is to catch
 the failure modes the lightweight unit suite cannot:
 
 * the ``paperless_ngx.parsers`` entry point is actually discoverable, and
-  resolves to :class:`PaperlessChandraParser`;
+  resolves to :class:`PaperlessChandraParser`.
 * ``paperless_chandra.parser`` imports cleanly against the *real*
   paperless-ngx API surface (``paperless.parsers.tesseract``,
   ``paperless.version``) - i.e. paperless has not renamed/moved anything
-  the parser depends on;
+  the parser depends on.
 * ``paperless_chandra.ocrmypdf_plugin`` imports and the ocrmypdf hookimpl
-  wiring binds our engine;
+  wiring binds our engine.
 * the upstream builder, with the override on top, hands ocrmypdf the
   Chandra plugin once, no API key and the user's ``chandra_*`` values.
 
@@ -133,6 +133,18 @@ def check_parser_contract() -> None:
                 f"got {args.get('plugins')!r}"
             )
         _ok("user arguments keep their chandra_* values, lose the key and list the plugin once")
+
+        # The builder imports no plugin, so other_plugin need not exist.
+        user_args = '{"plugins": ["paperless_chandra.ocrmypdf_plugin", "other_plugin"]}'
+        with override_settings(OCR_USER_ARGS=user_args), PaperlessChandraParser() as parser:
+            args = parser.construct_ocrmypdf_parameters(
+                png, "image/png", tmp / "out.pdf", tmp / "sidecar.txt"
+            )
+        if args.get("plugins") != ["paperless_chandra.ocrmypdf_plugin", "other_plugin"]:
+            _fail(
+                f"the user's own plugin should follow the Chandra module, got {args.get('plugins')!r}"
+            )
+        _ok("user arguments keep their own plugins after the Chandra module")
 
     if PaperlessChandraParser.uses_remote_service is not True:
         _fail("PaperlessChandraParser.uses_remote_service should be True")
