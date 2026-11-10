@@ -187,7 +187,7 @@ standard `PAPERLESS_OCR_*` variables (see
 | `PAPERLESS_CHANDRA_MODEL_NAME` | `chandra` | Served model name the inference server advertises. Matches the vLLM launcher default; override it when your server advertises a different name. |
 | `PAPERLESS_CHANDRA_API_KEY` | *(unset)* | Bearer token for the server. When unset, the vLLM convention `EMPTY` is sent instead. |
 | `PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS` | `12384` | Per-page output token budget passed to the inference server. A page whose output reaches the budget is cut off, and the document fails (see [Troubleshooting](#a-page-hits-the-output-token-budget)). |
-| `PAPERLESS_CHANDRA_TIMEOUT` | `600` | Seconds the plugin waits for one request to the server before the document fails. No retry on a timeout. |
+| `PAPERLESS_CHANDRA_TIMEOUT` | `600` | Seconds each wait for data from the server may last before the document fails. The value is no limit for the whole request, so a gateway that sends bytes at intervals can keep a request open for longer. No retry on a timeout. |
 | `PAPERLESS_CHANDRA_CONTENT_FORMAT` | `text` | `text` or `markdown`. Selects what paperless stores as document content; the invisible PDF text layer underneath is always plain text. |
 | `PAPERLESS_CHANDRA_SCORE` | `15` | Parser-registry priority. Higher scores win when more than one parser claims the same MIME type; the built-in Tesseract parser scores `10`, so the default makes Chandra preferred whenever this plugin is installed. |
 
