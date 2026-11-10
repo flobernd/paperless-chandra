@@ -192,7 +192,9 @@ def ocr_image(image: Image.Image, options: Any) -> str:
             raise ChandraClientError(
                 f"The Chandra server at {settings.url} did not answer within "
                 f"{settings.timeout} seconds. Raise PAPERLESS_CHANDRA_TIMEOUT for slow "
-                "inference, or lower PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS."
+                "inference. Lower PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS only for a generation "
+                "that repeats itself until the timeout, so the plugin gets the output in time "
+                "to retry it."
             ) from e
         except APIConnectionError as e:
             cause = e.__cause__ or e
