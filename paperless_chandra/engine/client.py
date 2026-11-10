@@ -40,6 +40,8 @@ _THINKING_HINT = (
     "so the OCR output is returned as regular message content."
 )
 
+_FILTER_HINT = "Adjust the content filter of the inference server or of the gateway in front of it."
+
 #: Warn about a thinking-wrapped response once per process, not once per page.
 _think_warned = False
 
@@ -227,6 +229,19 @@ def ocr_image(image: Image.Image, options: Any) -> str:
                 "inference server."
             )
         choice = choices[0]
+        # A document must not be stored without the text of a filtered or
+        # refused page. These checks precede the loop check, so such a page is
+        # not retried.
+        if choice.finish_reason == "content_filter":
+            raise ChandraClientError(
+                f"The Chandra server at {settings.url} filtered the output for the page "
+                f"(finish reason content_filter). {_FILTER_HINT}"
+            )
+        refusal = getattr(choice.message, "refusal", None)
+        if refusal:
+            raise ChandraClientError(
+                f"The Chandra server at {settings.url} refused the page ({refusal}). {_FILTER_HINT}"
+            )
         raw = choice.message.content or ""
         token_count = completion.usage.completion_tokens if completion.usage else 0
         # A loop at temperature 0 usually runs into the budget, so the loop
