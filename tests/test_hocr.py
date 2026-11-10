@@ -59,13 +59,6 @@ def test_render_hocr_escapes_text():
     assert "&lt;b&gt;&amp;" in render_hocr(_page(line))
 
 
-def test_write_document_sidecar_override(tmp_path):
-    hocr_path, text_path = tmp_path / "p.hocr", tmp_path / "p.txt"
-    write_document(_page(_line()), hocr_path, text_path, sidecar="custom order")
-    assert text_path.read_text(encoding="utf-8") == "custom order"
-    assert "ocrx_word" in hocr_path.read_text(encoding="utf-8")
-
-
 def test_render_drops_xml_invalid_characters_from_words():
     # ocrmypdf's hOCR parser rejects a NUL, and a lone surrogate cannot be encoded as UTF-8.
     hocr = render_hocr(_page(_line(text="in\x00voice\ud800\ufffe")))

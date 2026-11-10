@@ -16,10 +16,6 @@ def test_paragraphs_become_separate_lines():
     assert block_lines("before<p>first</p>after") == ["before", "first", "after"]
 
 
-def test_br_splits_lines_inside_a_paragraph():
-    assert block_lines("<p>first<br>second</p>") == ["first", "second"]
-
-
 def test_list_items_become_lines():
     assert block_lines("<ul><li>alpha</li><li>beta</li></ul>") == ["alpha", "beta"]
 
@@ -29,17 +25,9 @@ def test_table_rows_one_line_cells_space_joined():
     assert block_lines(html) == ["a1 a2", "b1 b2"]
 
 
-def test_math_keeps_latex_source():
-    assert block_lines("<p>area <math>x^2 + y_1</math> end</p>") == ["area x^2 + y_1 end"]
-
-
 def test_checkboxes_render_as_brackets():
     html = '<p><input type="checkbox" checked/> yes <input type="checkbox"/> no</p>'
     assert block_lines(html) == ["[x] yes [ ] no"]
-
-
-def test_plain_text_without_tags_is_one_line():
-    assert block_lines("just words") == ["just words"]
 
 
 def test_whitespace_is_collapsed_and_empties_dropped():

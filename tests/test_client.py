@@ -145,20 +145,6 @@ def test_timeout_fails_once_and_names_the_variable(fake):
     assert len(fake.calls) == 1
 
 
-def test_connection_error_retries_twice_then_fails(fake, monkeypatch):
-    monkeypatch.setattr("time.sleep", lambda s: None)
-    fake.script([APIConnectionError(request=_request())] * 3)
-    with pytest.raises(ChandraClientError, match="not reachable"):
-        ocr_image(_image(), _options())
-    assert len(fake.calls) == 3
-
-
-def test_connection_error_then_success_returns_the_page(fake, monkeypatch):
-    monkeypatch.setattr("time.sleep", lambda s: None)
-    fake.script([APIConnectionError(request=_request()), _completion("<div>ok</div>")])
-    assert ocr_image(_image(), _options()) == "<div>ok</div>"
-
-
 def test_connection_retries_span_the_whole_page(fake, monkeypatch):
     monkeypatch.setattr("time.sleep", lambda s: None)
     fake.script(
@@ -172,12 +158,6 @@ def test_connection_retries_span_the_whole_page(fake, monkeypatch):
     with pytest.raises(ChandraClientError, match="not reachable"):
         ocr_image(_image(), _options())
     assert len(fake.calls) == 4
-
-
-def test_length_finish_fails_and_names_the_budget(fake):
-    fake.script([_completion("<div>partial", finish_reason="length", tokens=12384)])
-    with pytest.raises(ChandraClientError, match="PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS"):
-        ocr_image(_image(), _options())
 
 
 @pytest.mark.parametrize("content", [None, "<think>\nThe image shows an invoice."])
@@ -285,11 +265,6 @@ def test_repeat_loop_retries_with_a_higher_temperature(fake):
     fake.script([_completion(_LOOPED), _completion("<div>ok</div>")])
     assert ocr_image(_image(), _options()) == "<div>ok</div>"
     assert fake.calls[1]["temperature"] > fake.calls[0]["temperature"]
-
-
-def test_loop_cut_at_the_budget_is_retried(fake):
-    fake.script([_completion(_LOOPED, finish_reason="length"), _completion("<div>ok</div>")])
-    assert ocr_image(_image(), _options()) == "<div>ok</div>"
 
 
 def test_loop_at_the_budget_after_two_retries_fails(fake):

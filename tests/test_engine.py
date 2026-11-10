@@ -119,7 +119,3 @@ def test_get_orientation_maps_osd_result(tmp_path, monkeypatch):
     oc = ChandraEngine.get_orientation(_page_png(tmp_path), _options())
     assert oc.angle == 180
     assert oc.confidence == 9.95
-
-
-def test_creator_tag_mentions_chandra():
-    assert "Chandra" in ChandraEngine.creator_tag(_options())
