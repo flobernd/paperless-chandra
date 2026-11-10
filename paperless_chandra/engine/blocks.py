@@ -17,7 +17,7 @@ import re
 from bs4 import BeautifulSoup
 
 from paperless_chandra.engine.geometry import BBox, estimate_word_boxes
-from paperless_chandra.engine.hocr import Block, Line, Page, Word
+from paperless_chandra.engine.hocr import Block, Line, Page, Word, clamp_box
 
 log = logging.getLogger("paperless.chandra.blocks")
 
@@ -68,8 +68,7 @@ def _chunk_box(chunk: dict, width: int, height: int) -> BBox:
     if len(bbox) < 4:
         return 0, 0, width, height
     x0, y0, x1, y1 = (int(v) for v in bbox)
-    x0, y0 = max(0, x0), max(0, y0)
-    x1, y1 = min(x1, width), min(y1, height)
+    x0, y0, x1, y1 = clamp_box((x0, y0, x1, y1), width, height)
     if x1 - x0 < 2 or y1 - y0 < 2:
         log.debug("Degenerate chunk bbox %s widened to full page.", bbox)
         return 0, 0, width, height
@@ -115,7 +114,7 @@ def page_sidecar(page: Page) -> str:
         (" ".join(word.text for word in line.words) for line in block.lines)
         for block in page.blocks
     )
-    return "\n\n".join("\n".join(text for text in lines if text) for lines in blocks)
+    return "\n\n".join("\n".join(lines) for lines in blocks)
 
 
 def markdown_sidecar(raw_html: str) -> str:
