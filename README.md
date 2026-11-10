@@ -301,6 +301,13 @@ error. The error covers two more causes:
   delays the same failure, so disable thinking on the server. See
   [the GGUF entry](#documents-come-back-with-empty-text-when-served-from-a-gguf-llamacpp-ollama-lm-studio).
 
+### The server filters or refuses a page
+
+The error "filtered the output for the page (finish reason content_filter)" or "refused the page"
+means that the inference server, or a gateway in front of it, held back the text of a page. The
+plugin fails the document, because paperless would otherwise store it without that page's text.
+Adjust the content filter of the server or of the gateway.
+
 ### Server rejects requests with "model not found"
 
 The server advertises a model name that does not match `PAPERLESS_CHANDRA_MODEL_NAME`. Set

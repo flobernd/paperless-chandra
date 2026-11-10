@@ -38,10 +38,13 @@ def _image():
     return Image.new("RGB", (100, 100), "white")
 
 
-def _completion(content, finish_reason="stop", tokens=5, usage=True):
+def _completion(content, finish_reason="stop", tokens=5, usage=True, **message_fields):
     return SimpleNamespace(
         choices=[
-            SimpleNamespace(finish_reason=finish_reason, message=SimpleNamespace(content=content))
+            SimpleNamespace(
+                finish_reason=finish_reason,
+                message=SimpleNamespace(content=content, **message_fields),
+            )
         ],
         usage=SimpleNamespace(completion_tokens=tokens) if usage else None,
     )
@@ -230,6 +233,22 @@ def test_other_status_carries_the_status_and_the_server_message(fake):
 def test_answer_without_a_choice_names_the_server_url(fake, answer):
     fake.script([answer])
     with pytest.raises(ChandraClientError, match="PAPERLESS_CHANDRA_SERVER_URL"):
+        ocr_image(_image(), _options())
+
+
+# A check keyed on the content lets null content through. Output that repeats
+# itself reaches the loop retry unless the filter check comes first.
+@pytest.mark.parametrize("content", [None, _LOOPED], ids=["null-content", "looping-output"])
+def test_filtered_page_fails_without_a_retry(fake, content):
+    fake.script([_completion(content, finish_reason="content_filter")] * 3)
+    with pytest.raises(ChandraClientError, match="content_filter"):
+        ocr_image(_image(), _options())
+    assert len(fake.calls) == 1
+
+
+def test_refusal_fails_and_carries_its_text(fake):
+    fake.script([_completion(None, refusal="I cannot transcribe this document.")])
+    with pytest.raises(ChandraClientError, match="I cannot transcribe this document"):
         ocr_image(_image(), _options())
 
 
