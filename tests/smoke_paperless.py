@@ -14,6 +14,9 @@ the failure modes the lightweight unit suite cannot:
   wiring binds our engine.
 * the upstream builder, with the override on top, hands ocrmypdf the
   Chandra plugin once, no API key and the user's ``chandra_*`` values.
+* one page goes through the parser, ocrmypdf and the plugin to a stub
+  server and comes back as text in both content formats and as an archive
+  PDF, and a stopped server fails the parse with its URL.
 
 Exit code is non-zero on the first failed check so callers fail loudly.
 """
@@ -142,7 +145,8 @@ def check_parser_contract() -> None:
             )
         if args.get("plugins") != ["paperless_chandra.ocrmypdf_plugin", "other_plugin"]:
             _fail(
-                f"the user's own plugin should follow the Chandra module, got {args.get('plugins')!r}"
+                "the user's own plugin should follow the Chandra module, "
+                f"got {args.get('plugins')!r}"
             )
         _ok("user arguments keep their own plugins after the Chandra module")
 
@@ -151,12 +155,70 @@ def check_parser_contract() -> None:
     _ok("parser declares itself a remote service")
 
 
+def check_document_run() -> None:
+    import os
+    import tempfile
+    from pathlib import Path
+    from unittest import mock
+
+    import pikepdf
+    from documents.parsers import ParseError
+    from e2e.make_test_page import write_page
+    from e2e.stub_chandra import STUB_MARKER, serve_in_thread
+
+    from paperless_chandra.parser import PaperlessChandraParser
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        png = write_page(Path(tmp_dir) / "page.png")
+
+        server, port = serve_in_thread()
+        try:
+            stub_url = {"PAPERLESS_CHANDRA_SERVER_URL": f"http://127.0.0.1:{port}"}
+            with mock.patch.dict(os.environ, stub_url), PaperlessChandraParser() as parser:
+                parser.parse(png, "image/png")
+                if STUB_MARKER not in parser.get_text():
+                    _fail(f"the page text lacks {STUB_MARKER!r}: {parser.get_text()!r}")
+                _ok("one page goes through ocrmypdf and the Chandra engine to the stub server")
+
+                archive = parser.get_archive_path()
+                if archive is None:
+                    _fail("parse() produced no archive PDF")
+                with pikepdf.open(archive) as pdf:
+                    creator = str(pdf.docinfo.get("/Creator", ""))
+                if "Chandra" not in creator:
+                    _fail(f"the archive PDF's /Creator should name Chandra, got {creator!r}")
+                _ok(f"the archive PDF names its creator: {creator}")
+
+            markdown = {**stub_url, "PAPERLESS_CHANDRA_CONTENT_FORMAT": "markdown"}
+            with mock.patch.dict(os.environ, markdown), PaperlessChandraParser() as parser:
+                parser.parse(png, "image/png")
+                if "# PAPERLESS CHANDRA STUB OK" not in parser.get_text():
+                    _fail(f"the markdown content lacks the stub's heading: {parser.get_text()!r}")
+            _ok("the markdown content format reaches the engine")
+        finally:
+            server.shutdown()
+            server.server_close()
+
+        # Port 9 belongs to the discard service, which nothing runs here.
+        stopped_url = {"PAPERLESS_CHANDRA_SERVER_URL": "http://127.0.0.1:9"}
+        with mock.patch.dict(os.environ, stopped_url), PaperlessChandraParser() as parser:
+            try:
+                parser.parse(png, "image/png")
+            except ParseError as e:
+                if "127.0.0.1:9" not in str(e):
+                    _fail(f"the ParseError should name the server, got {e}")
+            else:
+                _fail("parse() should raise ParseError when the server is down")
+        _ok("a stopped server fails the parse with a ParseError that names it")
+
+
 def main() -> None:
     print("== paperless-chandra smoke test ==", flush=True)
     check_entry_point()
     check_plugin_wiring()
     check_parser_imports()
     check_parser_contract()
+    check_document_run()
     print("== all smoke checks passed ==", flush=True)
 
 

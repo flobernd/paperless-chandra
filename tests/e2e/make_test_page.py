@@ -32,7 +32,7 @@ _BODY_LINES = [
 ]
 
 
-def main(out_path: str, rotate_deg: int = 0) -> None:
+def write_page(out_path: str | Path, rotate_deg: int = 0) -> Path:
     img = Image.new("RGB", (_WIDTH, _HEIGHT), "white")
     draw = ImageDraw.Draw(img)
     font_big = ImageFont.load_default(size=108)
@@ -51,7 +51,11 @@ def main(out_path: str, rotate_deg: int = 0) -> None:
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     img.save(out, dpi=(300, 300))
-    print(f"wrote {out}")
+    return out
+
+
+def main(out_path: str, rotate_deg: int = 0) -> None:
+    print(f"wrote {write_page(out_path, rotate_deg)}")
 
 
 if __name__ == "__main__":
