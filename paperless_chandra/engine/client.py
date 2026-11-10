@@ -157,7 +157,7 @@ def _status_error(error: APIStatusError, settings: RequestSettings) -> ChandraCl
 
 
 def ocr_image(image: Image.Image, options: Any) -> str:
-    """OCR one page image via the remote server; return Chandra's raw HTML."""
+    """OCR one page image via the remote server. The result is Chandra's raw HTML."""
     settings = request_settings(options)
     # The SDK's own retries would run beneath the policy below and stretch
     # one page to several timeouts.
