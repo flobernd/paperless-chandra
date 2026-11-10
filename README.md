@@ -16,7 +16,7 @@ Paperless continues to drive `ocrmypdf` exactly as before. Existing OCR configur
 keeps working, and archive PDFs remain PDF/A.
 
 > [!NOTE]
-> Requires paperless-ngx 3.0 or later with the parser plugin system (the
+> Tested with paperless-ngx 3.0 to 3.4. Requires 3.0 or later with the parser plugin system (the
 > `paperless_ngx.parsers` entry-point group). On older releases the entry point is not discovered
 > and the plugin is silently inactive.
 
