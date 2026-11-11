@@ -9,13 +9,11 @@ built-in Tesseract parser are unaffected.
 
 from __future__ import annotations
 
-import logging
 from typing import Any
-from urllib.error import HTTPError
-from urllib.request import Request, urlopen
 
 import ocrmypdf
 from ocrmypdf.exceptions import MissingDependencyError
+from openai import APIConnectionError, APIStatusError, OpenAI
 
 from paperless_chandra import (
     CONTENT_FORMATS,
@@ -25,52 +23,59 @@ from paperless_chandra import (
     DEFAULT_TIMEOUT_SECONDS,
 )
 from paperless_chandra.engine.client import (
+    SERVER_URL_ADVICE,
     ChandraClientError,
-    normalize_server_url,
+    not_reachable_message,
     rejected_key_message,
     request_settings,
 )
 from paperless_chandra.engine.engine import ChandraEngine, content_format
 
-log = logging.getLogger("paperless.chandra.plugin")
-
 #: Successful probes per (url, api_key); check_options runs once per
 #: document, and one probe per worker process is enough.
 _PROBED_SERVERS: set[tuple[str, str]] = set()
 
+#: A vLLM server under load answers /models slowly. A successful probe is
+#: kept for the worker process, so a slow server costs the wait once.
+_PROBE_TIMEOUT_SECONDS = 30
 
-def _probe_server(server_url: str, api_key: str) -> None:
+
+def _probe_server(url: str, api_key: str) -> None:
     """Fail fast when the Chandra server is unreachable or rejects the key.
 
     Without this, a wrong URL or key surfaces only at first inference,
     deep inside a celery task.
     """
-    base = normalize_server_url(server_url)
-    cache_key = (base, api_key)
+    cache_key = (url, api_key)
     if cache_key in _PROBED_SERVERS:
         return
 
-    request = Request(f"{base}/models")  # noqa: S310 - operator-configured URL
-    request.add_header("Authorization", f"Bearer {api_key}")
+    no_model_list = (
+        f"The Chandra server at {url} answered without a model list. {SERVER_URL_ADVICE}"
+    )
     try:
-        # A vLLM server under load answers /models slowly. A successful probe
-        # is cached per worker process, so a slow server costs the wait once.
-        with urlopen(request, timeout=30):  # noqa: S310
-            pass
-    except HTTPError as e:
-        if e.code in (401, 403):
-            raise MissingDependencyError(rejected_key_message(base, e.code)) from e
-        log.warning(
-            "Chandra server preflight got HTTP %d from %s/models; continuing.",
-            e.code,
-            base,
-        )
-    except OSError as e:
+        with OpenAI(
+            api_key=api_key,
+            base_url=url,
+            timeout=_PROBE_TIMEOUT_SECONDS,
+            max_retries=0,
+        ) as client:
+            page = client.models.list()
+    except APIStatusError as e:
+        if e.status_code in (401, 403):
+            raise MissingDependencyError(rejected_key_message(url, e.status_code)) from e
         raise MissingDependencyError(
-            f"The Chandra server at {base} is not reachable ({getattr(e, 'reason', e)}). "
-            "Check PAPERLESS_CHANDRA_SERVER_URL and that the inference "
-            "server container is running."
+            f"The Chandra server at {url} answered HTTP {e.status_code} at /models. "
+            f"{SERVER_URL_ADVICE}"
         ) from e
+    except APIConnectionError as e:
+        raise MissingDependencyError(not_reachable_message(url, e.__cause__ or e)) from e
+    # The SDK does not validate a 200 body. A page of text reaches its list
+    # parser as a str and fails there with an error of its own.
+    except Exception as e:
+        raise MissingDependencyError(no_model_list) from e
+    if not isinstance(getattr(page, "data", None), list):
+        raise MissingDependencyError(no_model_list)
     _PROBED_SERVERS.add(cache_key)
 
 

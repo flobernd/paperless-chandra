@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import contextlib
-import logging
-import urllib.error
 from types import SimpleNamespace
 
+import httpx
 import pytest
 from ocrmypdf.exceptions import MissingDependencyError
+from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
 
 from paperless_chandra import ocrmypdf_plugin
 
@@ -26,13 +25,49 @@ def _options(**overrides):
     return SimpleNamespace(**defaults)
 
 
+_MODEL_LIST = SimpleNamespace(data=[SimpleNamespace(id="chandra")])
+
+
+def _request():
+    return httpx.Request("GET", "http://ocr-host:8000/v1/models")
+
+
+def _status_error(status):
+    return APIStatusError("error", response=httpx.Response(status, request=_request()), body=None)
+
+
+class _FakeOpenAI:
+    """Stands in for the OpenAI client class: records the client's arguments, replays one answer."""
+
+    def __init__(self):
+        self.init_kwargs = {}
+        self.requests = 0
+        self.answer = _MODEL_LIST
+        self.models = SimpleNamespace(list=self._list)
+
+    def __call__(self, **kwargs):
+        self.init_kwargs = kwargs
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        return None
+
+    def _list(self):
+        self.requests += 1
+        if isinstance(self.answer, Exception):
+            raise self.answer
+        return self.answer
+
+
 @pytest.fixture(autouse=True)
-def _no_network(monkeypatch):
-    original = ocrmypdf_plugin._probe_server
-    stub = lambda url, key: None  # noqa: E731
-    stub.__wrapped__ = original  # type: ignore[attr-defined]
-    monkeypatch.setattr(ocrmypdf_plugin, "_probe_server", stub)
+def sdk(monkeypatch):
+    fake = _FakeOpenAI()
+    monkeypatch.setattr(ocrmypdf_plugin, "OpenAI", fake)
     ocrmypdf_plugin._PROBED_SERVERS.clear()
+    return fake
 
 
 def test_check_options_accepts_the_lowest_limits(monkeypatch):
@@ -47,18 +82,15 @@ def test_check_options_requires_server_url():
         ocrmypdf_plugin.check_options(_options(chandra_server_url="  "))
 
 
-def test_preflight_sends_the_environment_key_when_the_option_is_empty(monkeypatch):
-    monkeypatch.setattr(ocrmypdf_plugin, "_probe_server", ocrmypdf_plugin._probe_server.__wrapped__)  # type: ignore[attr-defined]
+def test_preflight_sends_the_environment_key_when_the_option_is_empty(sdk, monkeypatch):
     monkeypatch.setenv("PAPERLESS_CHANDRA_API_KEY", "from-env")
-    sent = []
-
-    def capture(request, timeout):
-        sent.append(request)
-        return contextlib.nullcontext()
-
-    monkeypatch.setattr(ocrmypdf_plugin, "urlopen", capture)
     ocrmypdf_plugin.check_options(_options(chandra_api_key=""))
-    assert sent[0].get_header("Authorization") == "Bearer from-env"
+    assert sdk.init_kwargs["api_key"] == "from-env"
+
+
+def test_preflight_keeps_its_own_limit_and_no_sdk_retries(sdk):
+    ocrmypdf_plugin.check_options(_options(chandra_timeout=5))
+    assert sdk.init_kwargs["timeout"] == 30 and sdk.init_kwargs["max_retries"] == 0
 
 
 def test_check_options_rejects_unknown_content_format():
@@ -91,40 +123,52 @@ def test_check_options_rejects_a_number_for_a_text_option():
         ocrmypdf_plugin.check_options(_options(chandra_model_name=5))
 
 
-def test_probe_maps_auth_failure(monkeypatch):
-    def raise_401(request, timeout):
-        raise urllib.error.HTTPError(request.full_url, 401, "unauthorized", {}, None)
-
-    monkeypatch.setattr(ocrmypdf_plugin, "urlopen", raise_401)
-    ocrmypdf_plugin._PROBED_SERVERS.clear()
+def test_probe_maps_auth_failure(sdk):
+    sdk.answer = _status_error(401)
     with pytest.raises(MissingDependencyError, match="rejected the API key"):
-        ocrmypdf_plugin._probe_server.__wrapped__("http://host:1", "bad")  # type: ignore[attr-defined]
+        ocrmypdf_plugin.check_options(_options())
 
 
-def test_probe_maps_unreachable_server(monkeypatch):
-    def raise_conn(request, timeout):
-        raise urllib.error.URLError("connection refused")
-
-    monkeypatch.setattr(ocrmypdf_plugin, "urlopen", raise_conn)
-    ocrmypdf_plugin._PROBED_SERVERS.clear()
+def test_probe_maps_unreachable_server(sdk):
+    sdk.answer = APIConnectionError(request=_request())
     with pytest.raises(MissingDependencyError, match="not reachable"):
-        ocrmypdf_plugin._probe_server.__wrapped__("http://host:1", "")  # type: ignore[attr-defined]
+        ocrmypdf_plugin.check_options(_options())
+    assert sdk.requests == 1
 
 
-def test_probe_maps_a_socket_error_without_reason(monkeypatch):
-    def raise_timeout(request, timeout):
-        raise TimeoutError("timed out")
+def test_probe_fails_on_a_server_error(sdk):
+    sdk.answer = _status_error(503)
+    with pytest.raises(
+        MissingDependencyError, match="HTTP 503 at /models.*PAPERLESS_CHANDRA_SERVER_URL"
+    ):
+        ocrmypdf_plugin.check_options(_options())
+    assert sdk.requests == 1
 
-    monkeypatch.setattr(ocrmypdf_plugin, "urlopen", raise_timeout)
+
+def test_probe_maps_a_timeout_to_not_reachable(sdk):
+    sdk.answer = APITimeoutError(request=_request())
     with pytest.raises(MissingDependencyError, match="not reachable"):
-        ocrmypdf_plugin._probe_server.__wrapped__("http://gpu:8000", "")  # type: ignore[attr-defined]
+        ocrmypdf_plugin.check_options(_options())
 
 
-def test_probe_continues_on_a_server_error(monkeypatch, caplog):
-    def raise_500(request, timeout):
-        raise urllib.error.HTTPError("http://gpu:8000/v1/models", 500, "boom", {}, None)
+@pytest.mark.parametrize(
+    "answer",
+    [
+        SimpleNamespace(data=None),
+        AttributeError("'str' object has no attribute '_set_private_attributes'"),
+    ],
+    ids=["json-without-data", "html-page"],
+)
+def test_probe_fails_on_an_answer_without_a_model_list(sdk, answer):
+    sdk.answer = answer
+    with pytest.raises(
+        MissingDependencyError, match="without a model list.*PAPERLESS_CHANDRA_SERVER_URL"
+    ):
+        ocrmypdf_plugin.check_options(_options())
 
-    monkeypatch.setattr(ocrmypdf_plugin, "urlopen", raise_500)
-    with caplog.at_level(logging.WARNING):
-        ocrmypdf_plugin._probe_server.__wrapped__("http://gpu:8000", "")  # type: ignore[attr-defined]
-    assert "HTTP 500" in caplog.text
+
+def test_probe_maps_a_url_without_a_scheme(monkeypatch):
+    # The real SDK refuses the URL before it opens a connection.
+    monkeypatch.setattr(ocrmypdf_plugin, "OpenAI", OpenAI)
+    with pytest.raises(MissingDependencyError, match="not reachable"):
+        ocrmypdf_plugin.check_options(_options(chandra_server_url="gpu-host"))
