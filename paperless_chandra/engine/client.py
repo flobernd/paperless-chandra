@@ -183,6 +183,21 @@ def rejected_key_message(url: str, status: int) -> str:
     )
 
 
+def _server_message(error: APIStatusError) -> str:
+    """The ``message`` of the server's error body, else the SDK's text.
+
+    The SDK's text for a JSON body is ``Error code: N - `` and a dump of the
+    whole body, so it is only the fallback for a body that holds no message,
+    such as FastAPI's ``{"detail": ...}`` or a proxy's HTML page.
+    """
+    body = error.body
+    if isinstance(body, Mapping):
+        message = body.get("message")
+        if isinstance(message, str) and message:
+            return message
+    return error.message
+
+
 def _status_error(error: APIStatusError, settings: RequestSettings) -> ChandraClientError:
     status = error.status_code
     if status in (401, 403):
@@ -190,17 +205,17 @@ def _status_error(error: APIStatusError, settings: RequestSettings) -> ChandraCl
     if status == 404:
         return ChandraClientError(
             f"The Chandra server at {settings.url} does not serve the model "
-            f"{settings.model!r} (HTTP 404: {error.message}). Set "
+            f"{settings.model!r} (HTTP 404: {_server_message(error)}). Set "
             "PAPERLESS_CHANDRA_MODEL_NAME to the name the server advertises."
         )
     if status == 400:
         return ChandraClientError(
             f"The Chandra server at {settings.url} rejected the request (HTTP 400): "
-            f"{error.message}. A PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS budget above the "
+            f"{_server_message(error)}. A PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS budget above the "
             "model's context window is a common cause."
         )
     return ChandraClientError(
-        f"The Chandra server at {settings.url} answered HTTP {status}: {error.message}"
+        f"The Chandra server at {settings.url} answered HTTP {status}: {_server_message(error)}"
     )
 
 

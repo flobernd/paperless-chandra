@@ -59,10 +59,10 @@ def _request():
 
 
 def _status_error(status, message="error", headers=None):
+    body = {"message": message, "type": "server_error"}
+    response = httpx.Response(status, request=_request(), headers=headers)
     return APIStatusError(
-        message,
-        response=httpx.Response(status, request=_request(), headers=headers),
-        body=None,
+        f"Error code: {status} - {{'error': {body}}}", response=response, body=body
     )
 
 
@@ -215,6 +215,7 @@ def test_bad_request_carries_the_server_message(fake):
         ocr_image(_image(), _options())
     assert "max_tokens is too large" in str(excinfo.value)
     assert "PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS" in str(excinfo.value)
+    assert "Error code" not in str(excinfo.value)
 
 
 def test_not_ready_status_is_retried(fake, waits):
@@ -225,8 +226,9 @@ def test_not_ready_status_is_retried(fake, waits):
 
 def test_other_status_carries_the_status_and_the_server_message(fake, waits):
     fake.script([_status_error(503, "engine overloaded")] * 5)
-    with pytest.raises(ChandraClientError, match="503.*engine overloaded"):
+    with pytest.raises(ChandraClientError, match="503.*engine overloaded") as excinfo:
         ocr_image(_image(), _options())
+    assert "Error code" not in str(excinfo.value)
     assert len(fake.calls) == 5
     assert waits == [1, 2, 4, 8]
 
@@ -236,6 +238,21 @@ def test_server_error_500_is_not_retried(fake):
     with pytest.raises(ChandraClientError, match="HTTP 500"):
         ocr_image(_image(), _options())
     assert len(fake.calls) == 1
+
+
+def test_status_error_with_a_text_body_names_the_status(fake):
+    page = "<html>proxy error</html>"
+    fake.script([APIStatusError(page, response=httpx.Response(500, request=_request()), body=page)])
+    with pytest.raises(ChandraClientError, match="HTTP 500"):
+        ocr_image(_image(), _options())
+
+
+def test_status_error_without_a_message_quotes_the_answer(fake):
+    body = {"detail": "Not Found"}
+    response = httpx.Response(404, request=_request())
+    fake.script([APIStatusError(f"Error code: 404 - {body}", response=response, body=body)])
+    with pytest.raises(ChandraClientError, match="HTTP 404.*Not Found"):
+        ocr_image(_image(), _options())
 
 
 @pytest.mark.parametrize(
