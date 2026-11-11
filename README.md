@@ -282,7 +282,7 @@ task:
 
 - `answered HTTP <status> at /models` - the server answered the preflight with an error status,
   and the document fails. Check that `PAPERLESS_CHANDRA_SERVER_URL` points at an OpenAI-compatible
-  inference server.
+  inference server. The error quotes the `message` of the server's error body when it has one.
 - "not reachable" - check `PAPERLESS_CHANDRA_SERVER_URL` and that the inference server is running.
 - "rejected the API key" (HTTP 401/403) - check `PAPERLESS_CHANDRA_API_KEY` against the server
   configuration.

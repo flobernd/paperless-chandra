@@ -144,6 +144,28 @@ def test_probe_fails_on_a_server_error(sdk):
     assert sdk.requests == 1
 
 
+def test_probe_status_error_quotes_the_server_message(sdk):
+    body = {"message": "model requires 24 GiB but only 16 GiB is available"}
+    response = httpx.Response(503, request=_request())
+    sdk.answer = APIStatusError(
+        f"Error code: 503 - {{'error': {body}}}", response=response, body=body
+    )
+    with pytest.raises(
+        MissingDependencyError,
+        match="HTTP 503 at /models: model requires 24 GiB but only 16 GiB is available",
+    ):
+        ocrmypdf_plugin.check_options(_options())
+
+
+def test_probe_status_error_leaves_out_a_text_body(sdk):
+    page = "<html><body><h1>404 Not Found</h1></body></html>"
+    response = httpx.Response(404, request=_request())
+    sdk.answer = APIStatusError(page, response=response, body=page)
+    with pytest.raises(MissingDependencyError, match=r"HTTP 404 at /models\. ") as excinfo:
+        ocrmypdf_plugin.check_options(_options())
+    assert "<html>" not in str(excinfo.value)
+
+
 def test_probe_maps_a_timeout_to_not_reachable(sdk):
     sdk.answer = APITimeoutError(request=_request())
     with pytest.raises(MissingDependencyError, match="not reachable"):

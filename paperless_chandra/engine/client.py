@@ -197,6 +197,16 @@ def _not_reachable_message(url: str, cause: object) -> str:
     )
 
 
+def _body_message(error: APIStatusError) -> str | None:
+    """The ``message`` of the server's error body, or ``None`` when the body holds none."""
+    body = error.body
+    if isinstance(body, Mapping):
+        message = body.get("message")
+        if isinstance(message, str) and message:
+            return message
+    return None
+
+
 def _server_message(error: APIStatusError) -> str:
     """The ``message`` of the server's error body, else the SDK's text.
 
@@ -204,12 +214,7 @@ def _server_message(error: APIStatusError) -> str:
     whole body, so it is only the fallback for a body that holds no message,
     such as FastAPI's ``{"detail": ...}`` or a proxy's HTML page.
     """
-    body = error.body
-    if isinstance(body, Mapping):
-        message = body.get("message")
-        if isinstance(message, str) and message:
-            return message
-    return error.message
+    return _body_message(error) or error.message
 
 
 def _status_error(error: APIStatusError, settings: RequestSettings) -> ChandraClientError:
@@ -275,8 +280,13 @@ def probe_server(url: str, api_key: str) -> None:
     except APIStatusError as e:
         if e.status_code in _REJECTED_KEY_STATUSES:
             raise ChandraClientError(_rejected_key_message(url, e.status_code)) from e
+        # The probe quotes the body's own message and leaves out the SDK's
+        # text, which for a body that is no JSON is the whole body. A wrong
+        # URL often reaches a web server that answers with an HTML page.
+        message = _body_message(e)
+        quoted = f": {message}" if message else ""
         raise ChandraClientError(
-            f"The Chandra server at {url} answered HTTP {e.status_code} at /models. "
+            f"The Chandra server at {url} answered HTTP {e.status_code} at /models{quoted}. "
             f"{_SERVER_URL_ADVICE}"
         ) from e
     except APIConnectionError as e:
