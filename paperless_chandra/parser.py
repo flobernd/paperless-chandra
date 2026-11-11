@@ -57,8 +57,8 @@ _BUILDER_HOOK_MISSING: Final[str] = (
 # The registry logs a module that fails to import, skips it and lets
 # Tesseract take every document. The module stays importable so that the
 # parser fails each consumption with this message instead.
-_BUILDER_HOOK_PRESENT: Final[bool] = "construct_ocrmypdf_parameters" in vars(
-    RasterisedDocumentParser
+_BUILDER_HOOK_PRESENT: Final[bool] = hasattr(
+    RasterisedDocumentParser, "construct_ocrmypdf_parameters"
 )
 if not _BUILDER_HOOK_PRESENT:
     logger.error(_BUILDER_HOOK_MISSING)
@@ -171,9 +171,9 @@ class PaperlessChandraParser(RasterisedDocumentParser):
         mime_type: str,
         output_file: Path,
         sidecar_file: Path,
-        *,
-        safe_fallback: bool = False,
-        skip_text: bool = False,
+        # The keywords pass through unread, so a keyword that a later
+        # paperless-ngx release adds needs no change here.
+        **kwargs: Any,
     ) -> dict[str, Any]:
         # The result already holds the OCR user arguments, which the parent
         # merges last.
@@ -182,8 +182,7 @@ class PaperlessChandraParser(RasterisedDocumentParser):
             mime_type,
             output_file,
             sidecar_file,
-            safe_fallback=safe_fallback,
-            skip_text=skip_text,
+            **kwargs,
         )
         args["plugins"] = [_OCRMYPDF_PLUGIN_MODULE, *_user_plugins(args.get("plugins"))]
         # parse() writes these arguments to the debug log, and paperless
