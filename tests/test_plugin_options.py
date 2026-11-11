@@ -82,6 +82,16 @@ def test_check_options_requires_server_url():
         ocrmypdf_plugin.check_options(_options(chandra_server_url="  "))
 
 
+def test_skip_text_run_does_not_probe_the_server(sdk):
+    ocrmypdf_plugin.check_options(_options(skip_text=True))
+    assert sdk.requests == 0
+
+
+def test_skip_text_run_still_requires_a_server_url():
+    with pytest.raises(MissingDependencyError, match="PAPERLESS_CHANDRA_SERVER_URL"):
+        ocrmypdf_plugin.check_options(_options(skip_text=True, chandra_server_url="  "))
+
+
 def test_preflight_sends_the_environment_key_when_the_option_is_empty(sdk, monkeypatch):
     monkeypatch.setenv("PAPERLESS_CHANDRA_API_KEY", "from-env")
     ocrmypdf_plugin.check_options(_options(chandra_api_key=""))

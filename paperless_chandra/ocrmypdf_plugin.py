@@ -139,7 +139,7 @@ def add_options(parser: Any) -> None:
 
 @ocrmypdf.hookimpl
 def check_options(options: Any) -> None:
-    """Validate configuration and probe the inference server."""
+    """Validate the options and probe the inference server unless the run skips pages with text."""
     fmt = content_format(options)
     if fmt not in CONTENT_FORMATS:
         # argparse validates the CLI path via `choices=`; the Python API
@@ -150,7 +150,10 @@ def check_options(options: Any) -> None:
 
     try:
         settings = request_settings(options)
-        _probe_server(settings.url, settings.api_key)
+        # A run with skip_text may send no page to the server, and a page that
+        # does go there reports a server that is down.
+        if not getattr(options, "skip_text", False):
+            _probe_server(settings.url, settings.api_key)
     except ChandraClientError as e:
         raise MissingDependencyError(str(e)) from e
 
