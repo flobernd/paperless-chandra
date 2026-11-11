@@ -258,6 +258,15 @@ def test_refusal_fails_and_carries_its_text(fake):
         ocr_image(_image(), _options())
 
 
+def test_filtered_page_with_a_refusal_carries_both(fake):
+    refusal = "This page shows a passport."
+    fake.script([_completion(None, finish_reason="content_filter", refusal=refusal)])
+    with pytest.raises(ChandraClientError) as excinfo:
+        ocr_image(_image(), _options())
+    assert "content_filter" in str(excinfo.value)
+    assert refusal in str(excinfo.value)
+
+
 def test_null_content_with_tokens_is_empty_and_warns(fake, caplog):
     fake.script([_completion(None, tokens=534)])
     with caplog.at_level(logging.WARNING):

@@ -230,19 +230,20 @@ def ocr_image(image: Image.Image, options: Any) -> str:
                     "inference server."
                 )
             choice = choices[0]
+            refusal = getattr(choice.message, "refusal", None)
             # A document must not be stored without the text of a filtered or
             # refused page. These checks precede the loop check, so such a page is
             # not retried.
             if choice.finish_reason == "content_filter":
+                refused = f" and refused it ({refusal})" if refusal else ""
                 raise ChandraClientError(
                     f"The Chandra server at {settings.url} filtered the output for the page "
-                    f"(finish reason content_filter). {_FILTER_HINT}"
+                    f"(finish reason content_filter){refused}. {_FILTER_HINT}"
                 )
-            refusal = getattr(choice.message, "refusal", None)
             if refusal:
                 raise ChandraClientError(
-                    f"The Chandra server at {settings.url} refused the page ({refusal}). "
-                    f"{_FILTER_HINT}"
+                    f"The Chandra server at {settings.url} refused the page "
+                    f"({refusal}). {_FILTER_HINT}"
                 )
             raw = choice.message.content or ""
             token_count = completion.usage.completion_tokens if completion.usage else 0
