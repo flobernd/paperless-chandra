@@ -28,7 +28,7 @@ def _chandra_version() -> str:
 
 def content_format(options: Any) -> str:
     """The ``chandra_content_format`` option, trimmed and defaulted."""
-    return (getattr(options, "chandra_content_format", "") or DEFAULT_CONTENT_FORMAT).strip()
+    return (client.text_option(options, "chandra_content_format") or DEFAULT_CONTENT_FORMAT).strip()
 
 
 class ChandraEngine(OcrEngine):
