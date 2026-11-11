@@ -80,3 +80,10 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 show_error_codes = true
 strict_equality = true
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    # chandra-ocr declares its settings with the class-based config of
+    # pydantic, which this repository cannot change.
+    "ignore::pydantic.warnings.PydanticDeprecatedSince20:chandra.settings",
+]
