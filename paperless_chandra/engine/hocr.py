@@ -18,6 +18,10 @@ from paperless_chandra.engine.geometry import BBox
 _LANG_RE = re.compile(r"^[a-z]{2,3}$")
 _XML_INVALID_RE = re.compile(r"[^\x09\x0a\x0d\x20-\ud7ff\ue000-\ufffd\U00010000-\U0010ffff]")
 
+#: XML-invalid controls that ``str.split()`` counts as whitespace. Dropping
+#: them would join the words around them, so they become a space first.
+_XML_INVALID_WS_RE = re.compile(r"[\x0b\x0c\x1c-\x1f]")
+
 
 def to_hocr_lang(code: str | None) -> str:
     """BCP-47 primary subtag for the hOCR ``lang`` attribute.
@@ -79,10 +83,12 @@ class Page:
 def clean_text(text: str) -> str:
     """Drop the code points XML 1.0 forbids, lone surrogates included.
 
-    ocrmypdf's hOCR parser rejects a document that holds one, and a lone
+    The six of them that ``str.split()`` counts as whitespace become a space
+    instead, so the words around them stay apart. ocrmypdf's hOCR parser
+    rejects a document that holds one of these code points, and a lone
     surrogate cannot be written as UTF-8 at all.
     """
-    return _XML_INVALID_RE.sub("", text)
+    return _XML_INVALID_RE.sub("", _XML_INVALID_WS_RE.sub(" ", text))
 
 
 def clamp_box(box: BBox, width: int, height: int) -> BBox:

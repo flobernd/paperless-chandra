@@ -17,7 +17,7 @@ import re
 from bs4 import BeautifulSoup
 
 from paperless_chandra.engine.geometry import BBox, estimate_word_boxes
-from paperless_chandra.engine.hocr import Block, Line, Page, Word, clamp_box
+from paperless_chandra.engine.hocr import Block, Line, Page, Word, clamp_box, clean_text
 
 log = logging.getLogger("paperless.chandra.blocks")
 
@@ -40,7 +40,10 @@ _WS_RE = re.compile(r"[^\S\n]+")
 
 def block_lines(content_html: str) -> list[str]:
     """Split a block's inner HTML into plain-text reading lines."""
-    soup = BeautifulSoup(content_html, "html.parser")
+    # chandra-ocr decodes a character reference such as ``&#1;`` in the block,
+    # so an XML-invalid code point can arrive here although the engine cleaned
+    # the raw answer. Left in, it becomes an empty word with a box of its own.
+    soup = BeautifulSoup(clean_text(content_html), "html.parser")
     for br in soup.find_all("br"):
         br.replace_with("\n")
     for widget in soup.find_all("input"):
