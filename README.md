@@ -61,15 +61,15 @@ build time, builds the wheel, and layers it onto `ghcr.io/paperless-ngx/paperles
 
 ```bash
 docker build \
-    --build-arg PLUGIN_REF=v0.1.0 \
+    --build-arg PLUGIN_REF=master \
     -f examples/Dockerfile \
     -t paperless-chandra:latest .
 ```
 
 Build args:
 
-- `PLUGIN_REF` - Git ref to build the plugin from. Use a release tag (`v0.1.0`) for reproducible
-  builds. `master` tracks the latest snapshot.
+- `PLUGIN_REF` - Git ref to build the plugin from (default `master`). Set a
+  [release tag](https://github.com/flobernd/paperless-chandra/releases) for reproducible builds.
 - `PAPERLESS_TAG` - paperless-ngx base image tag (default `latest`). Set a version tag
   (`3.0`) for reproducible builds.
 
@@ -85,7 +85,7 @@ build recipe:
 
 ```bash
 # Either:
-pip wheel --no-deps "git+https://github.com/flobernd/paperless-chandra.git@v0.1.0"
+pip wheel --no-deps "git+https://github.com/flobernd/paperless-chandra.git@master"
 
 # ...or, using docker/builder.Dockerfile:
 docker build -f docker/builder.Dockerfile -t paperless-chandra-builder .
@@ -101,7 +101,7 @@ runtime of its own. The install is idempotent across container restarts.
 ### C. Non-Docker host install
 
 ```bash
-pip install "git+https://github.com/flobernd/paperless-chandra.git@v0.1.0"
+pip install "git+https://github.com/flobernd/paperless-chandra.git@master"
 ```
 
 No extra native libraries are needed beyond what `ocrmypdf` and `chandra-ocr` already pull in.
@@ -165,15 +165,16 @@ On first startup the container will:
 2. Discover this package via the `paperless_ngx.parsers` entry point. Look for this log line:
 
    ```text
-   Loaded third-party parser 'Paperless-ngx Chandra Parser' v0.1.0 by Florian Bernd (entrypoint: 'chandra').
+   Loaded third-party parser 'Paperless-ngx Chandra Parser' v<version> by Florian Bernd (entrypoint: 'chandra').
    ```
 
 3. Route ingested documents through Chandra instead of Tesseract.
 
 ### Updating
 
-Rebuild the custom image with a newer `PLUGIN_REF` and recreate the container. The `chandra-server`
-sidecar is updated independently by pulling a newer `vllm/vllm-openai` image tag.
+Rebuild the custom image and recreate the container. If `PLUGIN_REF` names a release tag, set the
+newer tag first. The `chandra-server` sidecar is updated independently by pulling a newer
+`vllm/vllm-openai` image tag.
 
 ## Environment
 
