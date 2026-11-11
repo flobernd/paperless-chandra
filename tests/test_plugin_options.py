@@ -10,6 +10,7 @@ from ocrmypdf.exceptions import MissingDependencyError
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
 
 from paperless_chandra import ocrmypdf_plugin
+from paperless_chandra.engine import client
 
 
 def _options(**overrides):
@@ -65,8 +66,8 @@ class _FakeOpenAI:
 @pytest.fixture(autouse=True)
 def sdk(monkeypatch):
     fake = _FakeOpenAI()
-    monkeypatch.setattr(ocrmypdf_plugin, "OpenAI", fake)
-    ocrmypdf_plugin._PROBED_SERVERS.clear()
+    monkeypatch.setattr(client, "OpenAI", fake)
+    ocrmypdf_plugin._probe_server.cache_clear()
     return fake
 
 
@@ -179,6 +180,6 @@ def test_probe_fails_on_an_answer_without_a_model_list(sdk, answer):
 
 def test_probe_maps_a_url_without_a_scheme(monkeypatch):
     # The real SDK refuses the URL before it opens a connection.
-    monkeypatch.setattr(ocrmypdf_plugin, "OpenAI", OpenAI)
+    monkeypatch.setattr(client, "OpenAI", OpenAI)
     with pytest.raises(MissingDependencyError, match="not reachable"):
         ocrmypdf_plugin.check_options(_options(chandra_server_url="gpu-host"))

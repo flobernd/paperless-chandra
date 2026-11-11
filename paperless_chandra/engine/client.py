@@ -1,4 +1,4 @@
-"""Page request to the Chandra inference server.
+"""Page request and preflight probe for the Chandra inference server.
 
 chandra-ocr knows the model: the prompt, the image scaling, the base64
 encoding and the repeat detection. The OpenAI SDK knows the transport.
@@ -42,7 +42,13 @@ _NOT_READY_WAITS = (1.0, 2.0, 4.0, 8.0)
 _RETRY_AFTER_CEILING = 30.0
 _NOT_READY_WAIT_LIMIT = 60.0
 
+_REJECTED_KEY_STATUSES = frozenset({401, 403})
+
 _REPEAT_RETRIES = 2
+
+#: A vLLM server under load answers /models slowly. The plugin keeps a
+#: successful probe for the worker process, so a slow server costs the wait once.
+_PROBE_TIMEOUT_SECONDS = 30
 
 _THINKING_HINT = (
     "The inference server is likely applying a thinking-enabled chat "
@@ -53,7 +59,7 @@ _THINKING_HINT = (
 
 _FILTER_HINT = "Adjust the content filter of the inference server or of the gateway in front of it."
 
-SERVER_URL_ADVICE = (
+_SERVER_URL_ADVICE = (
     "Check that PAPERLESS_CHANDRA_SERVER_URL points at an OpenAI-compatible inference server."
 )
 
@@ -130,12 +136,8 @@ def _int_option(options: Any, name: str, default: int) -> int:
     value = getattr(options, name, None)
     if value is None:
         return default
-    # math.isfinite overflows on a large int, and an int is finite anyway.
-    if (
-        not isinstance(value, (int, float))
-        or (isinstance(value, float) and not math.isfinite(value))
-        or value < 1
-    ):
+    # NaN fails both comparisons, so the range rejects it too.
+    if not isinstance(value, (int, float)) or not 1 <= value < math.inf:
         raise ValueError(f"{name} must be a number of at least 1, got {value!r}.")
     return int(value)
 
@@ -179,7 +181,7 @@ def _is_repeat_loop(raw: str) -> bool:
     )
 
 
-def rejected_key_message(url: str, status: int) -> str:
+def _rejected_key_message(url: str, status: int) -> str:
     """Error text for a refused key, shared by the preflight probe and the page request."""
     return (
         f"The Chandra server at {url} rejected the API key (HTTP {status}). "
@@ -187,7 +189,7 @@ def rejected_key_message(url: str, status: int) -> str:
     )
 
 
-def not_reachable_message(url: str, cause: object) -> str:
+def _not_reachable_message(url: str, cause: object) -> str:
     """Error text for a failed connection, shared by the preflight probe and the page request."""
     return (
         f"The Chandra server at {url} is not reachable ({cause}). "
@@ -212,8 +214,8 @@ def _server_message(error: APIStatusError) -> str:
 
 def _status_error(error: APIStatusError, settings: RequestSettings) -> ChandraClientError:
     status = error.status_code
-    if status in (401, 403):
-        return ChandraClientError(rejected_key_message(settings.url, status))
+    if status in _REJECTED_KEY_STATUSES:
+        return ChandraClientError(_rejected_key_message(settings.url, status))
     if status == 404:
         return ChandraClientError(
             f"The Chandra server at {settings.url} does not serve the model "
@@ -252,18 +254,47 @@ def _retry_after(headers: Mapping[str, str]) -> float | None:
     return next((min(wait, _RETRY_AFTER_CEILING) for wait in waits if wait > 0), None)
 
 
+def _open_client(url: str, api_key: str, timeout: float) -> OpenAI:
+    # The callers own the retry policy. The SDK's own retries would run
+    # beneath it and stretch one request to several timeouts.
+    return OpenAI(api_key=api_key, base_url=url, timeout=timeout, max_retries=0)
+
+
+def probe_server(url: str, api_key: str) -> None:
+    """Fail fast unless the Chandra server answers ``/models`` with a model list.
+
+    Without this, a wrong URL or key surfaces only at first inference,
+    deep inside a celery task.
+    """
+    no_model_list = (
+        f"The Chandra server at {url} answered without a model list. {_SERVER_URL_ADVICE}"
+    )
+    try:
+        with _open_client(url, api_key, _PROBE_TIMEOUT_SECONDS) as client:
+            page = client.models.list()
+    except APIStatusError as e:
+        if e.status_code in _REJECTED_KEY_STATUSES:
+            raise ChandraClientError(_rejected_key_message(url, e.status_code)) from e
+        raise ChandraClientError(
+            f"The Chandra server at {url} answered HTTP {e.status_code} at /models. "
+            f"{_SERVER_URL_ADVICE}"
+        ) from e
+    except APIConnectionError as e:
+        raise ChandraClientError(_not_reachable_message(url, e.__cause__ or e)) from e
+    # The SDK does not validate a 200 body. A page of text reaches its list
+    # parser as a str and fails there with an error of its own.
+    except Exception as e:
+        raise ChandraClientError(no_model_list) from e
+    if not isinstance(getattr(page, "data", None), list):
+        raise ChandraClientError(no_model_list)
+
+
 def ocr_image(image: Image.Image, options: Any) -> str:
     """OCR one page image via the remote server. The result is Chandra's raw HTML."""
     settings = request_settings(options)
-    # The SDK's own retries would run beneath the policy below and stretch
-    # one page to several timeouts. Without the block, the connection of a
-    # page stays open until the garbage collector reaches the client.
-    with OpenAI(
-        api_key=settings.api_key,
-        base_url=settings.url,
-        timeout=settings.timeout,
-        max_retries=0,
-    ) as client:
+    # Without the block, the connection of a page stays open until the
+    # garbage collector reaches the client.
+    with _open_client(settings.url, settings.api_key, settings.timeout) as client:
         image_url = f"data:image/png;base64,{image_to_base64(scale_to_fit(image))}"
         temperature, top_p = 0.0, 0.1
         not_ready_retries = repeat_retries = 0
@@ -304,7 +335,7 @@ def ocr_image(image: Image.Image, options: Any) -> str:
                     wait = _retry_after(e.response.headers)
                 else:
                     cause = str(e.__cause__ or e)
-                    error = ChandraClientError(not_reachable_message(settings.url, cause))
+                    error = ChandraClientError(_not_reachable_message(settings.url, cause))
                 if not_ready_retries == len(_NOT_READY_WAITS):
                     raise error from e
                 if wait is None:
@@ -328,7 +359,7 @@ def ocr_image(image: Image.Image, options: Any) -> str:
             if not choices:
                 raise ChandraClientError(
                     f"The Chandra server at {settings.url} answered without a chat completion. "
-                    f"{SERVER_URL_ADVICE}"
+                    f"{_SERVER_URL_ADVICE}"
                 )
             choice = choices[0]
             refusal = getattr(choice.message, "refusal", None)
