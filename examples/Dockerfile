@@ -7,7 +7,7 @@
 #
 # Build:
 #   docker build \
-#     --build-arg PLUGIN_REF=v0.1.0 \
+#     --build-arg PLUGIN_REF=master \
 #     -f examples/Dockerfile \
 #     -t paperless-chandra:latest .
 

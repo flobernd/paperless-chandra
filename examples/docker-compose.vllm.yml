@@ -8,7 +8,7 @@
 #   CHANDRA_API_KEY=<some-random-string>
 #   PAPERLESS_DB_USER=<db-user>
 #   PAPERLESS_DB_PASSWORD=<strong-db-password>
-# Optional: PLUGIN_REF=v0.1.0 (release tag for reproducible builds).
+# Optional: PLUGIN_REF=<release tag> for reproducible builds (default master).
 #
 # The vLLM flags mirror the upstream chandra_vllm launcher, scaled for a
 # 24 GB GPU (L4 / RTX 4090 class). For an 80 GB H100 raise

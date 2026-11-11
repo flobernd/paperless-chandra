@@ -16,7 +16,7 @@
 #   * paperless_chandra-*.whl    (wheel - any version, first match wins)
 #
 # Obtain one with either of:
-#   pip wheel --no-deps "git+https://github.com/flobernd/paperless-chandra.git@v0.1.0"
+#   pip wheel --no-deps "git+https://github.com/flobernd/paperless-chandra.git@master"
 #   # or build docker/builder.Dockerfile and copy its /dist output
 #
 # The install is idempotent: repeated container restarts skip work that
