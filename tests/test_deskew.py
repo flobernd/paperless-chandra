@@ -21,8 +21,14 @@ def _bar_page(tmp_path, angle: float):
     return path
 
 
-def test_straight_page_reports_near_zero(tmp_path):
-    assert abs(estimate_skew(_bar_page(tmp_path, 0.0))) <= 0.2
+def test_blank_page_reports_zero(tmp_path):
+    path = tmp_path / "blank.png"
+    Image.new("L", (800, 600), 255).save(path)
+    assert estimate_skew(path) == 0.0
+
+
+def test_straight_page_reports_zero(tmp_path):
+    assert estimate_skew(_bar_page(tmp_path, 0.0)) == 0.0
 
 
 def test_skewed_page_reports_correction_angle(tmp_path):
