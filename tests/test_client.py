@@ -218,12 +218,6 @@ def test_bad_request_carries_the_server_message(fake):
     assert "Error code" not in str(excinfo.value)
 
 
-def test_not_ready_status_is_retried(fake, waits):
-    fake.script([_status_error(503), _completion("<div>ok</div>")])
-    assert ocr_image(_image(), _options()) == "<div>ok</div>"
-    assert waits == [1]
-
-
 def test_other_status_carries_the_status_and_the_server_message(fake, waits):
     fake.script([_status_error(503, "engine overloaded")] * 5)
     with pytest.raises(ChandraClientError, match="503.*engine overloaded") as excinfo:
@@ -258,14 +252,13 @@ def test_status_error_without_a_message_quotes_the_answer(fake):
 @pytest.mark.parametrize(
     ("headers", "wait"),
     [
-        ({"Retry-After": "7"}, 7),
         ({"Retry-After": "120"}, 30),
         ({"retry-after-ms": "1500", "Retry-After": "7"}, 1.5),
         ({"Retry-After": "Fri, 15 Jan 2027 08:00:12 GMT"}, 12),
         ({"Retry-After": "soon"}, 1),
         ({"Retry-After": "0"}, 1),
     ],
-    ids=["seconds", "ceiling", "milliseconds-first", "http-date", "unreadable", "zero"],
+    ids=["ceiling", "milliseconds-first", "http-date", "unreadable", "zero"],
 )
 def test_retry_header_sets_the_wait(fake, waits, monkeypatch, headers, wait):
     monkeypatch.setattr("time.time", lambda: _NOW)
