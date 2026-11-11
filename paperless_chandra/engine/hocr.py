@@ -85,9 +85,8 @@ def clean_text(text: str) -> str:
 def clamp_box(box: BBox, width: int, height: int) -> BBox:
     """Clamp ``box`` inside a ``width`` by ``height`` page, keeping at least one pixel.
 
-    Word boxes estimated near the page edge can come out zero-width,
-    inverted or past the edge, and ocrmypdf's hOCR parser drops an element
-    whose box is inverted.
+    A word box estimated for a narrow line can come out zero-width, and
+    ocrmypdf's hOCR parser drops an element whose box is inverted.
     """
     x0 = min(max(box[0], 0), width - 1)
     y0 = min(max(box[1], 0), height - 1)

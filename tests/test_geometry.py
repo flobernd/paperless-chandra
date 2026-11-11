@@ -30,3 +30,18 @@ def test_boxes_are_monotone_and_non_overlapping():
 def test_longer_words_get_wider_boxes():
     short, long = estimate_word_boxes(["ab", "abcdefgh"], (0, 0, 400, 20))
     assert (long[2] - long[0]) > (short[2] - short[0])
+
+
+def test_last_box_of_a_narrow_line_stays_inside_the_line():
+    # Six one-character words on nine pixels: widths and gaps that are rounded
+    # one by one add up to more than the line.
+    boxes = estimate_word_boxes(["a", "b", "c", "d", "e", "f"], (0, 0, 9, 20))
+    x0, _, x1, _ = boxes[-1]
+    assert x0 < 9
+    assert x1 == 9
+
+
+def test_boxes_start_at_the_left_edge_of_the_line():
+    # Weights 1, 0.5 and 1 over 100 pixels put the edges at 0, 40, 60 and 100.
+    boxes = estimate_word_boxes(["a", "b"], (100, 0, 200, 20))
+    assert boxes == [(100, 0, 140, 20), (160, 0, 200, 20)]
