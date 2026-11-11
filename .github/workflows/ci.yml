@@ -3,8 +3,10 @@ name: CI
 on:
   push:
     branches: [master]
+  # No branch filter, so a pull request whose base is another branch of a
+  # stack runs too. The push trigger keeps its filter, so such a branch
+  # does not run twice.
   pull_request:
-    branches: [master]
 
 permissions:
   contents: read
