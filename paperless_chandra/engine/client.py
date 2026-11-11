@@ -162,108 +162,112 @@ def ocr_image(image: Image.Image, options: Any) -> str:
     """OCR one page image via the remote server. The result is Chandra's raw HTML."""
     settings = request_settings(options)
     # The SDK's own retries would run beneath the policy below and stretch
-    # one page to several timeouts.
-    client = OpenAI(
+    # one page to several timeouts. Without the block, the connection of a
+    # page stays open until the garbage collector reaches the client.
+    with OpenAI(
         api_key=settings.api_key,
         base_url=settings.url,
         timeout=settings.timeout,
         max_retries=0,
-    )
-    image_url = f"data:image/png;base64,{image_to_base64(scale_to_fit(image))}"
-    temperature, top_p = 0.0, 0.1
-    connection_retries = repeat_retries = 0
-    while True:
-        try:
-            completion = client.chat.completions.create(
-                model=settings.model,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "image_url", "image_url": {"url": image_url}},
-                            {"type": "text", "text": PROMPT_MAPPING["ocr_layout"]},
-                        ],
-                    }
-                ],
-                max_tokens=settings.max_tokens,
-                temperature=temperature,
-                top_p=top_p,
-            )
-        # APITimeoutError subclasses APIConnectionError, so it is caught first.
-        except APITimeoutError as e:
-            raise ChandraClientError(
-                f"The Chandra server at {settings.url} did not answer within "
-                f"{settings.timeout} seconds. Raise PAPERLESS_CHANDRA_TIMEOUT for slow "
-                "inference. Lower PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS only for a generation "
-                "that repeats itself until the timeout, so the plugin gets the output in time "
-                "to retry it."
-            ) from e
-        except APIConnectionError as e:
-            cause = e.__cause__ or e
-            if connection_retries == _CONNECTION_RETRIES:
+    ) as client:
+        image_url = f"data:image/png;base64,{image_to_base64(scale_to_fit(image))}"
+        temperature, top_p = 0.0, 0.1
+        connection_retries = repeat_retries = 0
+        while True:
+            try:
+                completion = client.chat.completions.create(
+                    model=settings.model,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "image_url", "image_url": {"url": image_url}},
+                                {"type": "text", "text": PROMPT_MAPPING["ocr_layout"]},
+                            ],
+                        }
+                    ],
+                    max_tokens=settings.max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                )
+            # APITimeoutError subclasses APIConnectionError, so it is caught first.
+            except APITimeoutError as e:
                 raise ChandraClientError(
-                    f"The Chandra server at {settings.url} is not reachable ({cause}). "
-                    "Check PAPERLESS_CHANDRA_SERVER_URL and that the inference server "
-                    "is running."
+                    f"The Chandra server at {settings.url} did not answer within "
+                    f"{settings.timeout} seconds. Raise PAPERLESS_CHANDRA_TIMEOUT for slow "
+                    "inference. Lower PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS only for a generation "
+                    "that repeats itself until the timeout, so the plugin gets the output in time "
+                    "to retry it."
                 ) from e
-            connection_retries += 1
-            delay = 2 * connection_retries
-            log.warning(
-                "Chandra server at %s not reachable (%s), retrying in %d s.",
-                settings.url,
-                cause,
-                delay,
-            )
-            time.sleep(delay)
-            continue
-        except APIStatusError as e:
-            raise _status_error(e, settings) from e
+            except APIConnectionError as e:
+                cause = e.__cause__ or e
+                if connection_retries == _CONNECTION_RETRIES:
+                    raise ChandraClientError(
+                        f"The Chandra server at {settings.url} is not reachable ({cause}). "
+                        "Check PAPERLESS_CHANDRA_SERVER_URL and that the inference server "
+                        "is running."
+                    ) from e
+                connection_retries += 1
+                delay = 2 * connection_retries
+                log.warning(
+                    "Chandra server at %s not reachable (%s), retrying in %d s.",
+                    settings.url,
+                    cause,
+                    delay,
+                )
+                time.sleep(delay)
+                continue
+            except APIStatusError as e:
+                raise _status_error(e, settings) from e
 
-        # The SDK does not validate a 200 body: an HTML page arrives as a str,
-        # and a JSON body without choices as a completion whose choices are None.
-        choices = getattr(completion, "choices", None)
-        if not choices:
-            raise ChandraClientError(
-                f"The Chandra server at {settings.url} answered without a chat completion. "
-                "Check that PAPERLESS_CHANDRA_SERVER_URL points at an OpenAI-compatible "
-                "inference server."
-            )
-        choice = choices[0]
-        # A document must not be stored without the text of a filtered or
-        # refused page. These checks precede the loop check, so such a page is
-        # not retried.
-        if choice.finish_reason == "content_filter":
-            raise ChandraClientError(
-                f"The Chandra server at {settings.url} filtered the output for the page "
-                f"(finish reason content_filter). {_FILTER_HINT}"
-            )
-        refusal = getattr(choice.message, "refusal", None)
-        if refusal:
-            raise ChandraClientError(
-                f"The Chandra server at {settings.url} refused the page ({refusal}). {_FILTER_HINT}"
-            )
-        raw = choice.message.content or ""
-        token_count = completion.usage.completion_tokens if completion.usage else 0
-        # A loop at temperature 0 usually runs into the budget, so the loop
-        # check comes before the length check.
-        if repeat_retries < _REPEAT_RETRIES and _is_repeat_loop(raw):
-            repeat_retries += 1
-            temperature, top_p = min(0.2 * repeat_retries, 0.8), 0.95
-            log.info("Chandra output repeats, retrying at temperature %.1f.", temperature)
-            continue
-        if choice.finish_reason == "length":
-            message = (
-                f"Chandra's output for the page hit the budget of {settings.max_tokens} "
-                "tokens and was cut off. The plugin retries a detected repetition loop "
-                "twice before it raises this error. Raise PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS "
-                "when the page holds more text than the budget allows."
-            )
-            # A thinking template spends the budget on reasoning, and a larger
-            # budget only delays the same failure.
-            if not raw.strip() or _has_unclosed_think(raw):
-                message += f" The output is empty or an unclosed <think> block. {_THINKING_HINT}"
-            raise ChandraClientError(message)
-        break
+            # The SDK does not validate a 200 body: an HTML page arrives as a str,
+            # and a JSON body without choices as a completion whose choices are None.
+            choices = getattr(completion, "choices", None)
+            if not choices:
+                raise ChandraClientError(
+                    f"The Chandra server at {settings.url} answered without a chat completion. "
+                    "Check that PAPERLESS_CHANDRA_SERVER_URL points at an OpenAI-compatible "
+                    "inference server."
+                )
+            choice = choices[0]
+            # A document must not be stored without the text of a filtered or
+            # refused page. These checks precede the loop check, so such a page is
+            # not retried.
+            if choice.finish_reason == "content_filter":
+                raise ChandraClientError(
+                    f"The Chandra server at {settings.url} filtered the output for the page "
+                    f"(finish reason content_filter). {_FILTER_HINT}"
+                )
+            refusal = getattr(choice.message, "refusal", None)
+            if refusal:
+                raise ChandraClientError(
+                    f"The Chandra server at {settings.url} refused the page ({refusal}). "
+                    f"{_FILTER_HINT}"
+                )
+            raw = choice.message.content or ""
+            token_count = completion.usage.completion_tokens if completion.usage else 0
+            # A loop at temperature 0 usually runs into the budget, so the loop
+            # check comes before the length check.
+            if repeat_retries < _REPEAT_RETRIES and _is_repeat_loop(raw):
+                repeat_retries += 1
+                temperature, top_p = min(0.2 * repeat_retries, 0.8), 0.95
+                log.info("Chandra output repeats, retrying at temperature %.1f.", temperature)
+                continue
+            if choice.finish_reason == "length":
+                message = (
+                    f"Chandra's output for the page hit the budget of {settings.max_tokens} "
+                    "tokens and was cut off. The plugin retries a detected repetition loop "
+                    "twice before it raises this error. Raise PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS "
+                    "when the page holds more text than the budget allows."
+                )
+                # A thinking template spends the budget on reasoning, and a larger
+                # budget only delays the same failure.
+                if not raw.strip() or _has_unclosed_think(raw):
+                    message += (
+                        f" The output is empty or an unclosed <think> block. {_THINKING_HINT}"
+                    )
+                raise ChandraClientError(message)
+            break
 
     if _has_unclosed_think(raw):
         _warn_thinking_response("Chandra returned OCR output inside an unclosed <think> block")
