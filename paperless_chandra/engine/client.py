@@ -53,6 +53,10 @@ _THINKING_HINT = (
 
 _FILTER_HINT = "Adjust the content filter of the inference server or of the gateway in front of it."
 
+SERVER_URL_ADVICE = (
+    "Check that PAPERLESS_CHANDRA_SERVER_URL points at an OpenAI-compatible inference server."
+)
+
 #: Warn about a thinking-wrapped response once per process, not once per page.
 _think_warned = False
 
@@ -183,6 +187,14 @@ def rejected_key_message(url: str, status: int) -> str:
     )
 
 
+def not_reachable_message(url: str, cause: object) -> str:
+    """Error text for a failed connection, shared by the preflight probe and the page request."""
+    return (
+        f"The Chandra server at {url} is not reachable ({cause}). "
+        "Check PAPERLESS_CHANDRA_SERVER_URL and that the inference server is running."
+    )
+
+
 def _server_message(error: APIStatusError) -> str:
     """The ``message`` of the server's error body, else the SDK's text.
 
@@ -292,11 +304,7 @@ def ocr_image(image: Image.Image, options: Any) -> str:
                     wait = _retry_after(e.response.headers)
                 else:
                     cause = str(e.__cause__ or e)
-                    error = ChandraClientError(
-                        f"The Chandra server at {settings.url} is not reachable ({cause}). "
-                        "Check PAPERLESS_CHANDRA_SERVER_URL and that the inference server "
-                        "is running."
-                    )
+                    error = ChandraClientError(not_reachable_message(settings.url, cause))
                 if not_ready_retries == len(_NOT_READY_WAITS):
                     raise error from e
                 if wait is None:
@@ -320,8 +328,7 @@ def ocr_image(image: Image.Image, options: Any) -> str:
             if not choices:
                 raise ChandraClientError(
                     f"The Chandra server at {settings.url} answered without a chat completion. "
-                    "Check that PAPERLESS_CHANDRA_SERVER_URL points at an OpenAI-compatible "
-                    "inference server."
+                    f"{SERVER_URL_ADVICE}"
                 )
             choice = choices[0]
             refusal = getattr(choice.message, "refusal", None)

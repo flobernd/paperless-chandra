@@ -31,9 +31,9 @@ keeps working, and archive PDFs remain PDF/A.
 
 ## Requirements
 
-- A self-hosted, OpenAI-compatible inference server running Chandra. vLLM is the reference
-  deployment ([`examples/docker-compose.vllm.yml`](examples/docker-compose.vllm.yml)); any server
-  exposing the same `/v1/chat/completions` API works.
+- A self-hosted, OpenAI-compatible inference server running Chandra, with vLLM as the reference
+  deployment ([`examples/docker-compose.vllm.yml`](examples/docker-compose.vllm.yml)). Any server
+  works that exposes the same `/v1/chat/completions` API and answers `/v1/models` with a model list.
 - Full-precision (bf16) inference needs a GPU in the ~24 GB class (L4, RTX 4090, or larger) using
   the flags documented in the compose example below. Quantized GGUF checkpoints served through a
   compatible server fit on smaller GPUs, or run on CPU alone at reduced speed - see
@@ -278,8 +278,10 @@ installed the plugin (`pip show paperless-chandra` inside the container).
 `check_options` probes the server once per worker process before OCR starts, so misconfiguration
 fails fast with an actionable message instead of failing deep inside a Celery task:
 
-- "not reachable" - check `PAPERLESS_CHANDRA_SERVER_URL` and that the inference server container
-  is running.
+- `answered HTTP <status> at /models` - the server answered the preflight with an error status,
+  and the document fails. Check that `PAPERLESS_CHANDRA_SERVER_URL` points at an OpenAI-compatible
+  inference server.
+- "not reachable" - check `PAPERLESS_CHANDRA_SERVER_URL` and that the inference server is running.
 - "rejected the API key" (HTTP 401/403) - check `PAPERLESS_CHANDRA_API_KEY` against the server
   configuration.
 
