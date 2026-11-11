@@ -132,6 +132,13 @@ def test_request_carries_the_configured_model_and_budget(fake):
     assert fake.calls[0]["max_tokens"] == 2048
 
 
+def test_an_option_set_to_none_keeps_its_default(fake):
+    fake.script([_completion("x")])
+    ocr_image(_image(), _options(chandra_model_name=None, chandra_timeout=None))
+    assert fake.calls[0]["model"] == "chandra"
+    assert fake.init_kwargs["timeout"] == 600
+
+
 def test_client_carries_the_timeout_and_no_sdk_retries(fake):
     fake.script([_completion("x")])
     ocr_image(_image(), _options(chandra_timeout=42))
@@ -295,6 +302,12 @@ def test_api_key_falls_back_to_the_environment(monkeypatch):
 def test_api_key_defaults_to_the_vllm_convention(monkeypatch):
     monkeypatch.delenv("PAPERLESS_CHANDRA_API_KEY", raising=False)
     assert resolve_api_key(_options(chandra_api_key="")) == "EMPTY"
+
+
+def test_api_key_that_is_no_string_is_left_out_of_the_error():
+    with pytest.raises(ValueError, match="chandra_api_key") as raised:
+        resolve_api_key(_options(chandra_api_key=b"sk-73914286"))
+    assert "73914286" not in str(raised.value)
 
 
 def _warning_records(caplog):

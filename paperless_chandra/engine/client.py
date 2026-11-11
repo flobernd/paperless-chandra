@@ -10,6 +10,7 @@ plugin sets the timeout and the retry policy.
 from __future__ import annotations
 
 import logging
+import math
 import os
 import re
 import time
@@ -98,6 +99,33 @@ def normalize_server_url(raw: str) -> str:
     return url
 
 
+def text_option(options: Any, name: str) -> str:
+    """The option as it was set, or ``""`` when it is absent or empty."""
+    value = getattr(options, name, None)
+    if not value:
+        return ""
+    if not isinstance(value, str):
+        if name == "chandra_api_key":
+            # The value is a secret, and the error reaches the log.
+            raise ValueError(f"{name} must be a string.")
+        raise ValueError(f"{name} must be a string, got {value!r}.")
+    return value
+
+
+def _int_option(options: Any, name: str, default: int) -> int:
+    value = getattr(options, name, None)
+    if value is None:
+        return default
+    # math.isfinite overflows on a large int, and an int is finite anyway.
+    if (
+        not isinstance(value, (int, float))
+        or (isinstance(value, float) and not math.isfinite(value))
+        or value < 1
+    ):
+        raise ValueError(f"{name} must be a number of at least 1, got {value!r}.")
+    return int(value)
+
+
 def resolve_api_key(options: Any) -> str:
     """Bearer token for the server.
 
@@ -105,20 +133,23 @@ def resolve_api_key(options: Any) -> str:
     do not carry the key, and ``EMPTY`` is the vLLM convention for a server
     without auth.
     """
-    option = (getattr(options, "chandra_api_key", "") or "").strip()
+    option = text_option(options, "chandra_api_key").strip()
     return option or os.environ.get("PAPERLESS_CHANDRA_API_KEY", "").strip() or "EMPTY"
 
 
 def request_settings(options: Any) -> RequestSettings:
-    """Settings from the ``chandra_*`` options, with the package defaults."""
+    """Settings from the ``chandra_*`` options, with the package defaults.
+
+    The values are checked here because the Python API of ocrmypdf hands
+    over the user's values unchecked and argparse's ``type=int`` sets no
+    lower bound.
+    """
     return RequestSettings(
-        url=normalize_server_url(getattr(options, "chandra_server_url", "") or ""),
-        model=(getattr(options, "chandra_model_name", "") or "").strip() or DEFAULT_MODEL_NAME,
+        url=normalize_server_url(text_option(options, "chandra_server_url")),
+        model=text_option(options, "chandra_model_name").strip() or DEFAULT_MODEL_NAME,
         api_key=resolve_api_key(options),
-        max_tokens=(
-            int(getattr(options, "chandra_max_output_tokens", 0) or 0) or DEFAULT_MAX_OUTPUT_TOKENS
-        ),
-        timeout=int(getattr(options, "chandra_timeout", 0) or 0) or DEFAULT_TIMEOUT_SECONDS,
+        max_tokens=_int_option(options, "chandra_max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS),
+        timeout=_int_option(options, "chandra_timeout", DEFAULT_TIMEOUT_SECONDS),
     )
 
 

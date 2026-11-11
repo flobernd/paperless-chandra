@@ -28,7 +28,7 @@ from paperless_chandra.engine.client import (
     ChandraClientError,
     normalize_server_url,
     rejected_key_message,
-    resolve_api_key,
+    request_settings,
 )
 from paperless_chandra.engine.engine import ChandraEngine, content_format
 
@@ -143,19 +143,9 @@ def check_options(options: Any) -> None:
             f"Unknown chandra_content_format={fmt!r}. Valid choices: {list(CONTENT_FORMATS)}."
         )
 
-    # argparse's `type=int` has no lower bound, and the Python API skips
-    # argparse entirely. Without this check the client quietly replaces
-    # zero with the default, reports a negative timeout as "not
-    # reachable", and sends a negative budget to the server unchanged,
-    # where servers disagree on what it means.
-    for name in ("chandra_max_output_tokens", "chandra_timeout"):
-        value = getattr(options, name, None)
-        if value is not None and value < 1:
-            raise ValueError(f"{name} must be at least 1, got {value}.")
-
-    server_url = (getattr(options, "chandra_server_url", "") or "").strip()
     try:
-        _probe_server(server_url, resolve_api_key(options))
+        settings = request_settings(options)
+        _probe_server(settings.url, settings.api_key)
     except ChandraClientError as e:
         raise MissingDependencyError(str(e)) from e
 

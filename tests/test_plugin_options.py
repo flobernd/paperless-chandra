@@ -35,13 +35,14 @@ def _no_network(monkeypatch):
     ocrmypdf_plugin._PROBED_SERVERS.clear()
 
 
-def test_check_options_accepts_valid_configuration():
-    ocrmypdf_plugin.check_options(_options())
+def test_check_options_accepts_the_lowest_limits(monkeypatch):
+    probed = []
+    monkeypatch.setattr(ocrmypdf_plugin, "_probe_server", lambda url, key: probed.append(url))
+    ocrmypdf_plugin.check_options(_options(chandra_max_output_tokens=1, chandra_timeout=1))
+    assert probed == ["http://ocr-host:8000/v1"]
 
 
-def test_check_options_requires_server_url(monkeypatch):
-    # The real probe rejects a blank URL before it builds a request.
-    monkeypatch.setattr(ocrmypdf_plugin, "_probe_server", ocrmypdf_plugin._probe_server.__wrapped__)  # type: ignore[attr-defined]
+def test_check_options_requires_server_url():
     with pytest.raises(MissingDependencyError, match="PAPERLESS_CHANDRA_SERVER_URL"):
         ocrmypdf_plugin.check_options(_options(chandra_server_url="  "))
 
@@ -65,16 +66,29 @@ def test_check_options_rejects_unknown_content_format():
         ocrmypdf_plugin.check_options(_options(chandra_content_format="html"))
 
 
-@pytest.mark.parametrize("tokens", [0])
-def test_check_options_rejects_non_positive_max_output_tokens(tokens):
-    with pytest.raises(ValueError):
-        ocrmypdf_plugin.check_options(_options(chandra_max_output_tokens=tokens))
+def test_check_options_rejects_zero_max_output_tokens():
+    with pytest.raises(ValueError, match="chandra_max_output_tokens"):
+        ocrmypdf_plugin.check_options(_options(chandra_max_output_tokens=0))
 
 
-@pytest.mark.parametrize("timeout", [0])
-def test_check_options_rejects_non_positive_timeout(timeout):
-    with pytest.raises(ValueError):
-        ocrmypdf_plugin.check_options(_options(chandra_timeout=timeout))
+def test_check_options_rejects_zero_timeout():
+    with pytest.raises(ValueError, match="chandra_timeout"):
+        ocrmypdf_plugin.check_options(_options(chandra_timeout=0))
+
+
+def test_check_options_rejects_a_string_for_an_integer_option():
+    with pytest.raises(ValueError, match="chandra_timeout"):
+        ocrmypdf_plugin.check_options(_options(chandra_timeout="900"))
+
+
+def test_check_options_rejects_a_non_finite_number():
+    with pytest.raises(ValueError, match="chandra_timeout"):
+        ocrmypdf_plugin.check_options(_options(chandra_timeout=float("nan")))
+
+
+def test_check_options_rejects_a_number_for_a_text_option():
+    with pytest.raises(ValueError, match="chandra_model_name"):
+        ocrmypdf_plugin.check_options(_options(chandra_model_name=5))
 
 
 def test_probe_maps_auth_failure(monkeypatch):
