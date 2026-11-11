@@ -68,14 +68,15 @@ def test_write_document_sidecar_override(tmp_path):
 
 def test_render_drops_xml_invalid_characters_from_words():
     # ocrmypdf's hOCR parser rejects a NUL, and a lone surrogate cannot be encoded as UTF-8.
-    hocr = render_hocr(_page(_line(text="in\x00voice\ud800")))
+    hocr = render_hocr(_page(_line(text="in\x00voice\ud800\ufffe")))
     ElementTree.fromstring(hocr.encode("utf-8"))
     assert "invoice" in hocr and "\x00" not in hocr
+    assert "\ufffe" not in hocr
 
 
 def test_clean_text_keeps_whitespace_and_non_ascii_characters():
     # The sidecar separates its lines and blocks with newlines.
-    text = "a\tb\r\nc 日 \ufb01 \U0001f600"
+    text = "a\tb\r\nc 日 \ufb01 \ufffd \U0001f600"
     assert clean_text(text) == text
 
 

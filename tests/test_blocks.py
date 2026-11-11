@@ -13,7 +13,7 @@ from paperless_chandra.engine.blocks import (
 
 
 def test_paragraphs_become_separate_lines():
-    assert block_lines("<p>first</p><p>second</p>") == ["first", "second"]
+    assert block_lines("before<p>first</p>after") == ["before", "first", "after"]
 
 
 def test_br_splits_lines_inside_a_paragraph():
