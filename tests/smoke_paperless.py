@@ -115,6 +115,14 @@ def check_parser_contract() -> None:
             )
         _ok("builder attaches the Chandra plugin with the default chandra_* options")
 
+        with PaperlessChandraParser() as parser:
+            args = parser.construct_ocrmypdf_parameters(
+                png, "image/png", tmp / "out.pdf", tmp / "sidecar.txt", skip_text=True
+            )
+        if args.get("skip_text") is not True:
+            _fail(f"the builder should hand skip_text to the parent, got {args.get('skip_text')!r}")
+        _ok("builder hands its keywords to the parent")
+
         # paperless reads PAPERLESS_OCR_USER_ARGS into settings once at
         # import, so the user arguments reach OcrConfig through the setting.
         user_args = (
