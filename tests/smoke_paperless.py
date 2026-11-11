@@ -14,6 +14,8 @@ catch the failure modes the lightweight unit suite cannot:
   wiring binds our engine.
 * the upstream builder, with the override on top, hands ocrmypdf the
   Chandra plugin once, no API key and the user's ``chandra_*`` values.
+* the parser registry picks the parser for a PDF and passes it over when
+  remote parsers are not allowed.
 * one page goes through the parser, ocrmypdf and the plugin to a stub
   server and comes back as text in both content formats and as an archive
   PDF, and a server that is down at the probe or stops after it fails the
@@ -78,11 +80,14 @@ def check_parser_imports() -> None:
 
 
 def check_parser_contract() -> None:
+    import inspect
     import tempfile
     from pathlib import Path
 
     from django.test import override_settings
+    from paperless.parsers.registry import get_parser_registry
     from paperless.parsers.tesseract import RasterisedDocumentParser
+    from paperless.version import __version__ as host_version
     from PIL import Image
 
     from paperless_chandra.parser import PaperlessChandraParser
@@ -159,9 +164,28 @@ def check_parser_contract() -> None:
             )
         _ok("user arguments keep their own plugins after the Chandra module")
 
-    if PaperlessChandraParser.uses_remote_service is not True:
-        _fail("PaperlessChandraParser.uses_remote_service should be True")
-    _ok("parser declares itself a remote service")
+    registry = get_parser_registry()
+    chosen = registry.get_parser_for_file("application/pdf", "doc.pdf")
+    if chosen is not PaperlessChandraParser:
+        _fail(f"the registry should pick the Chandra parser for a PDF, got {chosen!r}")
+    # paperless-ngx 3.0 has no filter for remote parsers. A later release
+    # without the keyword fails, or the latest leg would stop checking the flag.
+    if "allow_remote" in inspect.signature(registry.get_parser_for_file).parameters:
+        local = registry.get_parser_for_file("application/pdf", "doc.pdf", allow_remote=False)
+        if local is PaperlessChandraParser:
+            _fail("allow_remote=False should keep a PDF away from the Chandra parser")
+        _ok(
+            "the registry picks the Chandra parser for a PDF, "
+            "and passes it over without remote parsers"
+        )
+    elif host_version[:2] == (3, 0):
+        _ok("the registry picks the Chandra parser for a PDF")
+    else:
+        host = ".".join(map(str, host_version))
+        _fail(
+            f"the registry of paperless-ngx {host} has no allow_remote keyword, "
+            "so the check cannot ask it to leave out remote parsers"
+        )
 
 
 def check_document_run() -> None:
