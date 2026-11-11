@@ -68,7 +68,7 @@ def _warn_thinking_response(reason: str) -> None:
     conversions embed the base model's chat template, which turns thinking
     back on. The result reaches this client either as an unclosed ``<think>``
     wrapper in the content or as empty content (the server diverted the whole
-    output to ``reasoning_content``); both parse to an empty page.
+    output to ``reasoning_content``). Both parse to an empty page.
     """
     global _think_warned
     if not _think_warned:
@@ -198,7 +198,7 @@ def ocr_image(image: Image.Image, options: Any) -> str:
             # APITimeoutError subclasses APIConnectionError, so it is caught first.
             except APITimeoutError as e:
                 raise ChandraClientError(
-                    f"The Chandra server at {settings.url} did not answer within "
+                    f"The Chandra server at {settings.url} sent no data for "
                     f"{settings.timeout} seconds. Raise PAPERLESS_CHANDRA_TIMEOUT for slow "
                     "inference. Lower PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS only for a generation "
                     "that repeats itself until the timeout, so the plugin gets the output in time "

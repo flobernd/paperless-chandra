@@ -81,7 +81,7 @@ def _env_int(name: str, default: int) -> int:
         return int(raw)
     except ValueError:
         logger.warning(
-            "Invalid integer value for %s=%r; using default %d.",
+            "Invalid integer value for %s=%r. Using default %d.",
             name,
             raw,
             default,
@@ -95,7 +95,7 @@ def _env_choice(name: str, choices: tuple[str, ...], default: str) -> str:
         return default
     if raw not in choices:
         logger.warning(
-            "Invalid value for %s=%r; valid choices are %s. Using default %r.",
+            "Invalid value for %s=%r. Valid choices are %s. Using default %r.",
             name,
             raw,
             choices,
