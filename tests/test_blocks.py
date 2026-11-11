@@ -59,7 +59,6 @@ def test_page_synthesises_lines_and_words():
     line = page.blocks[0].lines[0]
     assert [w.text for w in line.words] == ["hello", "world"]
     assert line.box == (100, 100, 500, 200)
-    assert all(w.confidence == 95 for w in line.words)
 
 
 def test_multi_line_block_splits_box_vertically():

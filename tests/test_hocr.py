@@ -28,7 +28,7 @@ def _page(line: Line, *, width: int = 400, height: int = 300) -> Page:
 
 
 def _line(*, text: str = "hi", box: BBox = (10, 10, 90, 40)) -> Line:
-    return Line(box=box, confidence=88, words=[Word(text, box, 88)])
+    return Line(box=box, words=[Word(text, box)])
 
 
 def test_to_hocr_lang_passes_iso_codes_through():
@@ -43,20 +43,18 @@ def test_to_hocr_lang_rejects_unexpected_values():
     assert to_hocr_lang('en" onload="x') == "und"
 
 
-def test_render_hocr_emits_page_word_and_conf():
+def test_render_hocr_emits_page_and_word():
     html = render_hocr(_page(_line()))
     assert 'class="ocr_page"' in html
     assert "bbox 0 0 400 300" in html
     assert 'class="ocrx_word"' in html
-    assert "x_wconf 88" in html
     assert 'lang="eng"' in html
 
 
 def test_render_hocr_escapes_text():
     line = Line(
         box=(0, 0, 50, 10),
-        confidence=90,
-        words=[Word("<b>&", (0, 0, 50, 10), 90)],
+        words=[Word("<b>&", (0, 0, 50, 10))],
     )
     assert "&lt;b&gt;&amp;" in render_hocr(_page(line))
 

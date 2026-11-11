@@ -23,10 +23,6 @@ log = logging.getLogger("paperless.chandra.blocks")
 
 OCR_SYSTEM = "Chandra via paperless-chandra"
 
-#: Chandra reports no per-word confidence; the text layer still needs an
-#: ``x_wconf``, so a fixed high value is used.
-CONFIDENCE = 95
-
 #: Labels whose content is not document text. ``Image`` / ``Figure`` alt
 #: descriptions and ``Diagram`` mermaid code are model narration and must
 #: not pollute the searchable layer. Unknown or missing labels are kept:
@@ -105,10 +101,10 @@ def page_from_chunks(chunks: list[dict], width: int, height: int, lang: str) -> 
             line_box = (x0, ly0, x1, ly1)
             tokens = text.split()
             words = [
-                Word(tok, box, CONFIDENCE)
+                Word(tok, box)
                 for tok, box in zip(tokens, estimate_word_boxes(tokens, line_box), strict=False)
             ]
-            lines.append(Line(box=line_box, confidence=CONFIDENCE, words=words))
+            lines.append(Line(box=line_box, words=words))
         page.blocks.append(Block(box=(x0, y0, x1, y1), lines=lines))
     return page
 

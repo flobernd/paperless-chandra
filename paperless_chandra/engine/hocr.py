@@ -31,18 +31,22 @@ def to_hocr_lang(code: str | None) -> str:
     return cleaned if _LANG_RE.fullmatch(cleaned) else "und"
 
 
+#: Chandra reports no confidence for a word, so each line and each word
+#: carries this one fixed high ``x_wconf``.
+CONFIDENCE = 95
+
+
 @dataclass(frozen=True)
 class Word:
     """One recognised word and its pixel box."""
 
     text: str
     box: BBox
-    confidence: int  # 0-100, serialised as x_wconf
 
 
 @dataclass
 class Line:
-    """A reading line: its box, its confidence and its words.
+    """A reading line: its box and its words.
 
     The words carry the text. A Chandra reading line has one space between
     its words, so the sidecar gets the line back by joining them with one
@@ -50,7 +54,6 @@ class Line:
     """
 
     box: BBox
-    confidence: int
     words: list[Word] = field(default_factory=list)
 
 
@@ -143,14 +146,14 @@ def render_hocr(page: Page) -> str:
             out.append(
                 f'<span class="ocr_line" id="line_{line_no}" '
                 f'title="{_bbox(line.box, page)}; baseline 0.000000 0; '
-                f'x_wconf {line.confidence}">',
+                f'x_wconf {CONFIDENCE}">',
             )
             last = len(line.words) - 1
             for i, word in enumerate(line.words):
                 word_no += 1
                 out.append(
                     f'<span class="ocrx_word" id="word_{word_no}" '
-                    f'title="{_bbox(word.box, page)}; x_wconf {word.confidence}">'
+                    f'title="{_bbox(word.box, page)}; x_wconf {CONFIDENCE}">'
                     f"{escape(clean_text(word.text))}</span>",
                 )
                 if i < last:

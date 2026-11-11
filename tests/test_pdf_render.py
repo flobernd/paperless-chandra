@@ -15,10 +15,9 @@ def test_render_textonly_produces_a_pdf(tmp_path):
 
     line = Line(
         box=(10, 10, 200, 40),
-        confidence=90,
         words=[
-            Word("hello", (10, 10, 100, 40), 90),
-            Word("world", (110, 10, 200, 40), 90),
+            Word("hello", (10, 10, 100, 40)),
+            Word("world", (110, 10, 200, 40)),
         ],
     )
     page = Page(
