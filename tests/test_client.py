@@ -74,6 +74,12 @@ class _FakeOpenAI:
         self.init_kwargs = kwargs
         return self
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        return None
+
     def _create(self, **kwargs):
         self.calls.append(kwargs)
         item = self._script.pop(0)
