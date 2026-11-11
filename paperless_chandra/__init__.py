@@ -1,6 +1,6 @@
 """Chandra OCR provider for paperless-ngx."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 #: Option defaults shared by the client, the parser and the plugin. They
 #: live here because paperless imports the parser in every process and
