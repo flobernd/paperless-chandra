@@ -41,7 +41,6 @@ def _render(tmp_path) -> Path:
 
 def test_render_textonly_sizes_the_page_from_the_image_dpi(tmp_path):
     with pikepdf.open(_render(tmp_path)) as pdf_doc:
-        assert len(pdf_doc.pages) == 1
         # 400 by 300 pixels at 72 dpi are 400 by 300 points.
         assert [float(v) for v in pdf_doc.pages[0].mediabox] == pytest.approx([0, 0, 400, 300])
 
@@ -54,5 +53,4 @@ def test_render_textonly_writes_invisible_text(tmp_path):
             if str(operator) == "Tr"
         ]
     # Text rendering mode 3 of the PDF specification draws nothing.
-    assert modes
     assert set(modes) == {3}

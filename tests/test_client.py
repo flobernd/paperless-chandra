@@ -205,8 +205,9 @@ def test_forbidden_names_the_api_key_variable(fake):
 
 def test_not_found_names_the_model_variable(fake):
     fake.script([_status_error(404)])
-    with pytest.raises(ChandraClientError, match="PAPERLESS_CHANDRA_MODEL_NAME"):
+    with pytest.raises(ChandraClientError, match="PAPERLESS_CHANDRA_MODEL_NAME") as excinfo:
         ocr_image(_image(), _options())
+    assert "Error code" not in str(excinfo.value)
 
 
 def test_bad_request_carries_the_server_message(fake):
@@ -218,7 +219,7 @@ def test_bad_request_carries_the_server_message(fake):
     assert "Error code" not in str(excinfo.value)
 
 
-def test_other_status_carries_the_status_and_the_server_message(fake, waits):
+def test_not_ready_status_fails_after_four_retries_with_the_server_message(fake, waits):
     fake.script([_status_error(503, "engine overloaded")] * 5)
     with pytest.raises(ChandraClientError, match="503.*engine overloaded") as excinfo:
         ocr_image(_image(), _options())
@@ -227,7 +228,7 @@ def test_other_status_carries_the_status_and_the_server_message(fake, waits):
     assert waits == [1, 2, 4, 8]
 
 
-def test_server_error_500_is_not_retried(fake):
+def test_server_error_500_is_not_retried(fake, waits):
     fake.script([_status_error(500)])
     with pytest.raises(ChandraClientError, match="HTTP 500"):
         ocr_image(_image(), _options())
@@ -245,7 +246,7 @@ def test_status_error_without_a_message_quotes_the_answer(fake):
     body = {"detail": "Not Found"}
     response = httpx.Response(404, request=_request())
     fake.script([APIStatusError(f"Error code: 404 - {body}", response=response, body=body)])
-    with pytest.raises(ChandraClientError, match="HTTP 404.*Not Found"):
+    with pytest.raises(ChandraClientError, match="HTTP 404.*detail.*Not Found"):
         ocr_image(_image(), _options())
 
 
@@ -255,10 +256,18 @@ def test_status_error_without_a_message_quotes_the_answer(fake):
         ({"Retry-After": "120"}, 30),
         ({"retry-after-ms": "1500", "Retry-After": "7"}, 1.5),
         ({"Retry-After": "Fri, 15 Jan 2027 08:00:12 GMT"}, 12),
+        ({"Retry-After": "Fri, 15 Jan 99999 08:00:12 GMT"}, 1),
         ({"Retry-After": "soon"}, 1),
         ({"Retry-After": "0"}, 1),
     ],
-    ids=["ceiling", "milliseconds-first", "http-date", "unreadable", "zero"],
+    ids=[
+        "ceiling",
+        "milliseconds-first",
+        "http-date",
+        "date-outside-the-calendar",
+        "unreadable",
+        "zero",
+    ],
 )
 def test_retry_header_sets_the_wait(fake, waits, monkeypatch, headers, wait):
     monkeypatch.setattr("time.time", lambda: _NOW)

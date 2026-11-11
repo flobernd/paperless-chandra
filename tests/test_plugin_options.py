@@ -71,11 +71,9 @@ def sdk(monkeypatch):
     return fake
 
 
-def test_check_options_accepts_the_lowest_limits(monkeypatch):
-    probed = []
-    monkeypatch.setattr(ocrmypdf_plugin, "_probe_server", lambda url, key: probed.append(url))
+def test_check_options_accepts_the_lowest_limits(sdk):
     ocrmypdf_plugin.check_options(_options(chandra_max_output_tokens=1, chandra_timeout=1))
-    assert probed == ["http://ocr-host:8000/v1"]
+    assert sdk.init_kwargs["base_url"] == "http://ocr-host:8000/v1"
 
 
 def test_skip_text_run_does_not_probe_the_server(sdk):
