@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import httpx
@@ -21,6 +22,9 @@ from paperless_chandra.engine.client import (
 
 # Ends in a closing tag, so only the library's cut_from_end check flags it.
 _LOOPED = "<p>" + "la " * 400 + "</p>"
+
+# The clock for the date form of Retry-After: Fri, 15 Jan 2027 08:00:00 GMT.
+_NOW = datetime(2027, 1, 15, 8, 0, 0, tzinfo=UTC).timestamp()
 
 
 def _options(**overrides):
@@ -54,8 +58,12 @@ def _request():
     return httpx.Request("POST", "http://gpu:8000/v1/chat/completions")
 
 
-def _status_error(status, message="error"):
-    return APIStatusError(message, response=httpx.Response(status, request=_request()), body=None)
+def _status_error(status, message="error", headers=None):
+    return APIStatusError(
+        message,
+        response=httpx.Response(status, request=_request(), headers=headers),
+        body=None,
+    )
 
 
 class _FakeOpenAI:
@@ -93,6 +101,13 @@ def fake(monkeypatch):
     sdk = _FakeOpenAI()
     monkeypatch.setattr(client, "OpenAI", sdk)
     return sdk
+
+
+@pytest.fixture
+def waits(monkeypatch):
+    recorded = []
+    monkeypatch.setattr("time.sleep", recorded.append)
+    return recorded
 
 
 @pytest.fixture(autouse=True)
@@ -152,19 +167,14 @@ def test_timeout_fails_once_and_names_the_variable(fake):
     assert len(fake.calls) == 1
 
 
-def test_connection_retries_span_the_whole_page(fake, monkeypatch):
-    monkeypatch.setattr("time.sleep", lambda s: None)
+def test_connection_retries_span_the_whole_page(fake, waits):
+    unreachable = APIConnectionError(request=_request())
     fake.script(
-        [
-            APIConnectionError(request=_request()),
-            APIConnectionError(request=_request()),
-            _completion(_LOOPED),
-            APIConnectionError(request=_request()),
-        ]
+        [unreachable, unreachable, _completion(_LOOPED), unreachable, unreachable, unreachable]
     )
     with pytest.raises(ChandraClientError, match="not reachable"):
         ocr_image(_image(), _options())
-    assert len(fake.calls) == 4
+    assert len(fake.calls) == 6
 
 
 @pytest.mark.parametrize("content", [None, "<think>\nThe image shows an invoice."])
@@ -207,10 +217,70 @@ def test_bad_request_carries_the_server_message(fake):
     assert "PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS" in str(excinfo.value)
 
 
-def test_other_status_carries_the_status_and_the_server_message(fake):
-    fake.script([_status_error(503, "engine overloaded")])
+def test_not_ready_status_is_retried(fake, waits):
+    fake.script([_status_error(503), _completion("<div>ok</div>")])
+    assert ocr_image(_image(), _options()) == "<div>ok</div>"
+    assert waits == [1]
+
+
+def test_other_status_carries_the_status_and_the_server_message(fake, waits):
+    fake.script([_status_error(503, "engine overloaded")] * 5)
     with pytest.raises(ChandraClientError, match="503.*engine overloaded"):
         ocr_image(_image(), _options())
+    assert len(fake.calls) == 5
+    assert waits == [1, 2, 4, 8]
+
+
+def test_server_error_500_is_not_retried(fake):
+    fake.script([_status_error(500)])
+    with pytest.raises(ChandraClientError, match="HTTP 500"):
+        ocr_image(_image(), _options())
+    assert len(fake.calls) == 1
+
+
+@pytest.mark.parametrize(
+    ("headers", "wait"),
+    [
+        ({"Retry-After": "7"}, 7),
+        ({"Retry-After": "120"}, 30),
+        ({"retry-after-ms": "1500", "Retry-After": "7"}, 1.5),
+        ({"Retry-After": "Fri, 15 Jan 2027 08:00:12 GMT"}, 12),
+        ({"Retry-After": "soon"}, 1),
+        ({"Retry-After": "0"}, 1),
+    ],
+    ids=["seconds", "ceiling", "milliseconds-first", "http-date", "unreadable", "zero"],
+)
+def test_retry_header_sets_the_wait(fake, waits, monkeypatch, headers, wait):
+    monkeypatch.setattr("time.time", lambda: _NOW)
+    fake.script([_status_error(429, headers=headers), _completion("<div>ok</div>")])
+    assert ocr_image(_image(), _options()) == "<div>ok</div>"
+    assert waits == [wait]
+
+
+def test_header_waits_stop_at_the_limit_of_a_page(fake, waits):
+    fake.script([_status_error(429, "slow down", headers={"Retry-After": "30"})] * 3)
+    with pytest.raises(ChandraClientError, match="429.*slow down"):
+        ocr_image(_image(), _options())
+    assert len(fake.calls) == 3
+    assert waits == [30, 30]
+
+
+def test_ladder_waits_count_toward_the_limit_of_a_page(fake, waits):
+    limited = _status_error(429, headers={"Retry-After": "30"})
+    fake.script([_status_error(503), limited, limited])
+    with pytest.raises(ChandraClientError, match="HTTP 429"):
+        ocr_image(_image(), _options())
+    assert len(fake.calls) == 3
+    assert waits == [1, 30]
+
+
+def test_status_and_connection_retries_share_one_count(fake, waits):
+    unreachable = APIConnectionError(request=_request())
+    busy = _status_error(503)
+    fake.script([busy, unreachable, busy, unreachable, busy])
+    with pytest.raises(ChandraClientError, match="HTTP 503"):
+        ocr_image(_image(), _options())
+    assert len(fake.calls) == 5
 
 
 # What the SDK returns for a 200 answer whose body is no chat completion.

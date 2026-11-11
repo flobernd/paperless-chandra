@@ -9,11 +9,14 @@ plugin sets the timeout and the retry policy.
 
 from __future__ import annotations
 
+import contextlib
+import email.utils
 import logging
 import math
 import os
 import re
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -31,7 +34,14 @@ from paperless_chandra import (
 
 log = logging.getLogger("paperless.chandra.client")
 
-_CONNECTION_RETRIES = 2
+# A server that is loading its model or is overloaded is not ready. It can
+# answer with one of these statuses, itself or through a gateway in front of
+# it, or a connection to it can fail.
+_NOT_READY_STATUSES = frozenset({429, 502, 503, 504})
+_NOT_READY_WAITS = (1.0, 2.0, 4.0, 8.0)
+_RETRY_AFTER_CEILING = 30.0
+_NOT_READY_WAIT_LIMIT = 60.0
+
 _REPEAT_RETRIES = 2
 
 _THINKING_HINT = (
@@ -194,6 +204,27 @@ def _status_error(error: APIStatusError, settings: RequestSettings) -> ChandraCl
     )
 
 
+def _retry_after(headers: Mapping[str, str]) -> float | None:
+    """The wait in seconds that an answer asks for, capped at the ceiling, or ``None``.
+
+    ``retry-after-ms`` comes first, then ``Retry-After`` as seconds and then as
+    an HTTP date. A form that does not read or that asks for no wait counts as
+    absent.
+    """
+    retry_after = headers.get("retry-after", "")
+    waits: list[float] = []
+    with contextlib.suppress(ValueError):
+        waits.append(float(headers.get("retry-after-ms", "")) / 1000)
+    with contextlib.suppress(ValueError):
+        waits.append(float(retry_after))
+    date = email.utils.parsedate_tz(retry_after)
+    if date is not None:
+        # A date that parses can still lie outside the calendar.
+        with contextlib.suppress(OverflowError, ValueError):
+            waits.append(email.utils.mktime_tz(date) - time.time())
+    return next((min(wait, _RETRY_AFTER_CEILING) for wait in waits if wait > 0), None)
+
+
 def ocr_image(image: Image.Image, options: Any) -> str:
     """OCR one page image via the remote server. The result is Chandra's raw HTML."""
     settings = request_settings(options)
@@ -208,7 +239,8 @@ def ocr_image(image: Image.Image, options: Any) -> str:
     ) as client:
         image_url = f"data:image/png;base64,{image_to_base64(scale_to_fit(image))}"
         temperature, top_p = 0.0, 0.1
-        connection_retries = repeat_retries = 0
+        not_ready_retries = repeat_retries = 0
+        not_ready_waited = 0.0
         while True:
             try:
                 completion = client.chat.completions.create(
@@ -235,26 +267,37 @@ def ocr_image(image: Image.Image, options: Any) -> str:
                     "that repeats itself until the timeout, so the plugin gets the output in time "
                     "to retry it."
                 ) from e
-            except APIConnectionError as e:
-                cause = e.__cause__ or e
-                if connection_retries == _CONNECTION_RETRIES:
-                    raise ChandraClientError(
+            except (APIConnectionError, APIStatusError) as e:
+                wait: float | None = None
+                if isinstance(e, APIStatusError):
+                    error = _status_error(e, settings)
+                    if e.status_code not in _NOT_READY_STATUSES:
+                        raise error from e
+                    cause = f"HTTP {e.status_code}"
+                    wait = _retry_after(e.response.headers)
+                else:
+                    cause = str(e.__cause__ or e)
+                    error = ChandraClientError(
                         f"The Chandra server at {settings.url} is not reachable ({cause}). "
                         "Check PAPERLESS_CHANDRA_SERVER_URL and that the inference server "
                         "is running."
-                    ) from e
-                connection_retries += 1
-                delay = 2 * connection_retries
+                    )
+                if not_ready_retries == len(_NOT_READY_WAITS):
+                    raise error from e
+                if wait is None:
+                    wait = _NOT_READY_WAITS[not_ready_retries]
+                if not_ready_waited + wait > _NOT_READY_WAIT_LIMIT:
+                    raise error from e
+                not_ready_retries += 1
+                not_ready_waited += wait
                 log.warning(
-                    "Chandra server at %s not reachable (%s), retrying in %d s.",
+                    "Chandra server at %s is not ready (%s), retrying in %g s.",
                     settings.url,
                     cause,
-                    delay,
+                    wait,
                 )
-                time.sleep(delay)
+                time.sleep(wait)
                 continue
-            except APIStatusError as e:
-                raise _status_error(e, settings) from e
 
             # The SDK does not validate a 200 body: an HTML page arrives as a str,
             # and a JSON body without choices as a completion whose choices are None.
