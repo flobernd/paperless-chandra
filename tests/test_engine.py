@@ -68,6 +68,32 @@ def test_generate_hocr_empty_response_writes_empty_sidecar(tmp_path, monkeypatch
     assert 'class="ocr_page"' in hocr.read_text(encoding="utf-8")
 
 
+def test_lone_surrogate_in_a_short_block_is_dropped_from_the_page(tmp_path, monkeypatch):
+    raw = '<div data-bbox="0 0 500 500" data-label="Text">a\ud800b</div>'
+    _, text = _run_generate_hocr(tmp_path, monkeypatch, _options(), raw=raw)
+    assert text.read_text(encoding="utf-8") == "ab"
+
+
+def test_form_feed_between_two_words_keeps_them_apart(tmp_path, monkeypatch):
+    raw = '<div data-bbox="0 0 500 500" data-label="Text">a\x0cb</div>'
+    _, text = _run_generate_hocr(tmp_path, monkeypatch, _options(), raw=raw)
+    assert text.read_text(encoding="utf-8") == "a b"
+
+
+def test_markdown_answer_without_a_block_drops_a_lone_surrogate(tmp_path, monkeypatch):
+    # chandra-ocr's markdown converter keeps only the top-level blocks, and this
+    # answer has none.
+    options = _options(chandra_content_format="markdown")
+    _, text = _run_generate_hocr(tmp_path, monkeypatch, options, raw="a\ud800b")
+    assert text.read_text(encoding="utf-8") == ""
+
+
+def test_control_character_reference_between_words_leaves_no_empty_word(tmp_path, monkeypatch):
+    raw = '<div data-bbox="0 0 500 500" data-label="Text">a &#1; b</div>'
+    _, text = _run_generate_hocr(tmp_path, monkeypatch, _options(), raw=raw)
+    assert text.read_text(encoding="utf-8") == "a b"
+
+
 def test_generate_pdf_dispatches_through_cls(tmp_path, monkeypatch):
     calls = []
 

@@ -13,7 +13,7 @@ from PIL import Image
 
 from paperless_chandra import DEFAULT_CONTENT_FORMAT
 from paperless_chandra.engine import blocks, client, deskew, osd, pdf
-from paperless_chandra.engine.hocr import write_document
+from paperless_chandra.engine.hocr import clean_text, write_document
 
 log = logging.getLogger("paperless.chandra.engine")
 
@@ -80,7 +80,9 @@ class ChandraEngine(OcrEngine):
         with Image.open(input_file) as img:
             image = img.convert("RGB")
 
-        raw = client.ocr_image(image, options)
+        # chandra-ocr hands the content of each block to BeautifulSoup itself,
+        # which fails on a lone surrogate in a short block.
+        raw = clean_text(client.ocr_image(image, options))
         chunks = parse_chunks(raw, image) if raw else []
 
         langs = list(getattr(options, "languages", None) or [])
