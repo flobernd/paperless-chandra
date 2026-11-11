@@ -119,6 +119,9 @@ jobs:
     name: Tests
     runs-on: ubuntu-latest
     strategy:
+      # A failed leg must not cancel the others, or a break of one Python
+      # version looks like a break of the change.
+      fail-fast: false
       matrix:
         python-version: ["3.12", "3.13", "3.14"]
     steps:
