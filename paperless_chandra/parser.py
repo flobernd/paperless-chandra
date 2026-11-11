@@ -150,20 +150,25 @@ class PaperlessChandraParser(RasterisedDocumentParser):
         # file the inherited methods' messages under Tesseract.
         self.log = logger
 
-        self._server_url: str = os.environ.get("PAPERLESS_CHANDRA_SERVER_URL", "").strip()
-        self._model_name: str = (
-            os.environ.get("PAPERLESS_CHANDRA_MODEL_NAME", "").strip() or DEFAULT_MODEL_NAME
-        )
-        self._max_output_tokens: int = _env_int(
-            "PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS",
-            default=DEFAULT_MAX_OUTPUT_TOKENS,
-        )
-        self._timeout: int = _env_int("PAPERLESS_CHANDRA_TIMEOUT", default=DEFAULT_TIMEOUT_SECONDS)
-        self._content_format: str = _env_choice(
-            "PAPERLESS_CHANDRA_CONTENT_FORMAT",
-            choices=CONTENT_FORMATS,
-            default=DEFAULT_CONTENT_FORMAT,
-        )
+        self._chandra_options: dict[str, int | str] = {
+            "chandra_content_format": _env_choice(
+                "PAPERLESS_CHANDRA_CONTENT_FORMAT",
+                choices=CONTENT_FORMATS,
+                default=DEFAULT_CONTENT_FORMAT,
+            ),
+            "chandra_max_output_tokens": _env_int(
+                "PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS",
+                default=DEFAULT_MAX_OUTPUT_TOKENS,
+            ),
+            "chandra_model_name": (
+                os.environ.get("PAPERLESS_CHANDRA_MODEL_NAME", "").strip() or DEFAULT_MODEL_NAME
+            ),
+            "chandra_server_url": os.environ.get("PAPERLESS_CHANDRA_SERVER_URL", "").strip(),
+            "chandra_timeout": _env_int(
+                "PAPERLESS_CHANDRA_TIMEOUT",
+                default=DEFAULT_TIMEOUT_SECONDS,
+            ),
+        }
 
     def construct_ocrmypdf_parameters(
         self,
@@ -193,12 +198,6 @@ class PaperlessChandraParser(RasterisedDocumentParser):
                 "Ignoring chandra_api_key in the OCR user arguments, because paperless "
                 "logs them. Set PAPERLESS_CHANDRA_API_KEY instead.",
             )
-        for key, value in (
-            ("chandra_content_format", self._content_format),
-            ("chandra_max_output_tokens", self._max_output_tokens),
-            ("chandra_model_name", self._model_name),
-            ("chandra_server_url", self._server_url),
-            ("chandra_timeout", self._timeout),
-        ):
+        for key, value in self._chandra_options.items():
             args.setdefault(key, value)
         return args
