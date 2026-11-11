@@ -14,7 +14,7 @@ on:
   # stack runs too. The push trigger keeps its filter, so such a branch
   # does not run twice.
   pull_request:
-  # The job runs against :latest, so a weekly run catches a paperless-ngx
+  # One leg runs against :latest, so a weekly run catches a paperless-ngx
   # release that breaks the plugin. GitHub stops the schedule after 60 days
   # without repository activity, and the workflow then has to be enabled
   # again by hand.
@@ -29,8 +29,14 @@ jobs:
   smoke:
     name: Smoke test
     runs-on: ubuntu-latest
+    strategy:
+      # A paperless-ngx release that breaks the latest leg must not cancel
+      # the leg at the lower bound of the supported range.
+      fail-fast: false
+      matrix:
+        paperless-tag: ["3.0", "latest"]
     container:
-      image: ghcr.io/paperless-ngx/paperless-ngx:latest
+      image: ghcr.io/paperless-ngx/paperless-ngx:${{ matrix.paperless-tag }}
       # paperless's s6 entrypoint would try to boot the whole app; we only
       # want a shell to run the smoke script.
       options: --entrypoint /bin/bash
@@ -78,7 +84,7 @@ jobs:
 
       - name: Run smoke test
         env:
-          PYTHONPATH: /usr/src/paperless/src
           PAPERLESS_OCR_LANGUAGE: eng
+          PYTHONPATH: /usr/src/paperless/src
         run: |
           "${{ steps.py.outputs.bin }}" tests/smoke_paperless.py
