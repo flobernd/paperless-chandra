@@ -35,8 +35,6 @@ def estimate_word_boxes(words: Sequence[str], box: BBox) -> list[BBox]:
     if not words:
         return []
     x0, y0, x1, y1 = box
-    if len(words) == 1:
-        return [(x0, y0, x1, y1)]
 
     line_width = x1 - x0
     weights = [max(1, len(w)) for w in words]
