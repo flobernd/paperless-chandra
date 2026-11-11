@@ -292,6 +292,12 @@ Each paperless task worker sends up to `PAPERLESS_THREADS_PER_WORKER` pages of i
 server at once. A server that works through one request at a time queues the rest, so a page's wait
 includes the pages ahead of it. A timeout fails the document with no retry.
 
+The plugin sends a page's request again after an answer with HTTP 429, 502, 503 or 504 or a failed
+connection, four times at most, after waits of 1, 2, 4 and 8 seconds. A `retry-after-ms` or
+`Retry-After` header from the server replaces the wait, up to 30 seconds. The waits of one page add
+up to 60 seconds at most. When the retries are spent or the next wait would pass that limit, the
+page fails with the server's last answer.
+
 Lower `PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS` only for a generation that repeats itself until the
 timeout. The plugin can retry a repetition loop only after the server returns the output, and a
 lower budget makes the server return it sooner. A page with more text than the lower budget then
