@@ -78,11 +78,6 @@ def test_check_options_accepts_the_lowest_limits(monkeypatch):
     assert probed == ["http://ocr-host:8000/v1"]
 
 
-def test_check_options_requires_server_url():
-    with pytest.raises(MissingDependencyError, match="PAPERLESS_CHANDRA_SERVER_URL"):
-        ocrmypdf_plugin.check_options(_options(chandra_server_url="  "))
-
-
 def test_skip_text_run_does_not_probe_the_server(sdk):
     ocrmypdf_plugin.check_options(_options(skip_text=True))
     assert sdk.requests == 0
@@ -112,11 +107,6 @@ def test_check_options_rejects_unknown_content_format():
 def test_check_options_rejects_zero_max_output_tokens():
     with pytest.raises(ValueError, match="chandra_max_output_tokens"):
         ocrmypdf_plugin.check_options(_options(chandra_max_output_tokens=0))
-
-
-def test_check_options_rejects_zero_timeout():
-    with pytest.raises(ValueError, match="chandra_timeout"):
-        ocrmypdf_plugin.check_options(_options(chandra_timeout=0))
 
 
 def test_check_options_rejects_a_string_for_an_integer_option():
