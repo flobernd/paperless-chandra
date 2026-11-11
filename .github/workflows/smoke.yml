@@ -1,8 +1,8 @@
 name: Smoke (paperless-ngx)
 
-# Runs inside the real paperless-ngx image so we catch API drift in
-# the paperless parser-plugin surface that the lightweight unit suite
-# (which never imports Django/paperless) cannot. chandra-ocr and its
+# The smoke job runs inside the real paperless-ngx image so we catch API
+# drift in the paperless parser-plugin surface that the lightweight unit
+# suite (which never imports Django/paperless) cannot. chandra-ocr and its
 # pure-python dependencies install alongside paperless's pinned packages.
 # The smoke test exercises entry-point discovery, import wiring and one
 # page through the pipeline against an in-process stub server.
@@ -14,10 +14,10 @@ on:
   # stack runs too. The push trigger keeps its filter, so such a branch
   # does not run twice.
   pull_request:
-  # One leg runs against :latest, so a weekly run catches a paperless-ngx
-  # release that breaks the plugin. GitHub stops the schedule after 60 days
-  # without repository activity, and the workflow then has to be enabled
-  # again by hand.
+  # The latest leg of the smoke job and the stub stack both run against
+  # :latest, so a weekly run catches a paperless-ngx release that breaks
+  # the plugin. GitHub stops the schedule after 60 days without repository
+  # activity, and the workflow then has to be enabled again by hand.
   schedule:
     - cron: "17 4 * * 1"
   workflow_dispatch:
@@ -88,3 +88,27 @@ jobs:
           PYTHONPATH: /usr/src/paperless/src
         run: |
           "${{ steps.py.outputs.bin }}" tests/smoke_paperless.py
+
+  # The stub stack is the one check that the paperless consumer picks the
+  # parser through its registry, that a page turned by 180 degrees comes
+  # out upright and that the archive keeps its text layer.
+  e2e:
+    name: End-to-end test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # run-stub.sh looks for its interpreter at .venv/bin/python.
+      - name: Create the virtual environment
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install pillow pypdf
+
+      - name: Run the stub end-to-end stack
+        run: tests/e2e/run-stub.sh

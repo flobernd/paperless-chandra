@@ -6,14 +6,21 @@ cd "$(dirname "$0")"
 REPO_ROOT=$(cd ../.. && pwd)
 PY="$REPO_ROOT/.venv/bin/python"
 
-cleanup() { docker compose -f docker-compose.stub.yml down -v; }
+cleanup() {
+  # A failed run on CI leaves no other record of what the consumer did.
+  docker compose -f docker-compose.stub.yml logs paperless || true
+  docker compose -f docker-compose.stub.yml down -v
+}
 trap cleanup EXIT
 
 rm -rf consume && mkdir -p consume
-docker compose -f docker-compose.stub.yml up -d --build
-
+# The paperless container makes its own user the owner of the consume
+# folder when it starts, so a user with another uid can only write the
+# pages before the stack is up.
 "$PY" make_test_page.py consume/e2e-test.png
 "$PY" make_test_page.py consume/e2e-rotated.png 180
+docker compose -f docker-compose.stub.yml up -d --build
+
 "$PY" assert_e2e.py \
   --expect "PAPERLESS CHANDRA STUB OK" --expect "Stub invoice 2026-0042" \
   --expect-docs 2 --assert-upright e2e-rotated --timeout 600
