@@ -1,8 +1,8 @@
 """Smoke test executed inside the paperless-ngx Docker image.
 
-This is *not* collected by pytest (filename is not ``test_*``); it runs
-with the real paperless-ngx runtime on ``PYTHONPATH``. Its job is to catch
-the failure modes the lightweight unit suite cannot:
+This is *not* collected by pytest, because its filename is not ``test_*``.
+It runs with the real paperless-ngx runtime on ``PYTHONPATH``. Its job is to
+catch the failure modes the lightweight unit suite cannot:
 
 * the ``paperless_ngx.parsers`` entry point is actually discoverable, and
   resolves to :class:`PaperlessChandraParser`.
@@ -74,7 +74,7 @@ def check_parser_imports() -> None:
     score = PaperlessChandraParser.score("application/pdf", "doc.pdf")
     if score is None or score <= 10:
         _fail(f"score() should beat Tesseract's 10, got {score!r}")
-    _ok(f"parser imports against real paperless-ngx; score={score}")
+    _ok(f"parser imports against real paperless-ngx with score {score}")
 
 
 def check_parser_contract() -> None:
