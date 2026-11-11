@@ -25,8 +25,9 @@ def estimate_word_boxes(words: Sequence[str], box: BBox) -> list[BBox]:
     * each inter-word gap weighs ``0.5`` (a space is narrower than a glyph);
     * each width is proportional to its weight over the total.
 
-    The last word's right edge is snapped to the ``box`` right edge so
-    rounding never leaves a gap. Every word inherits the line ``box``'s
+    Each edge is the rounded share of the weight to its left, so no
+    rounding error adds up and the last word ends at the ``box`` right edge.
+    Every word inherits the line ``box``'s
     ``y0`` / ``y1``. A single word fills the whole box; empty input returns
     ``[]``. Rough by design - it backs the invisible layer, not layout
     analysis.
@@ -40,14 +41,17 @@ def estimate_word_boxes(words: Sequence[str], box: BBox) -> list[BBox]:
     line_width = x1 - x0
     weights = [max(1, len(w)) for w in words]
     total = sum(weights) + _GAP_WEIGHT * (len(words) - 1)
-    gap_width = round(line_width * _GAP_WEIGHT / total)
 
     boxes: list[BBox] = []
-    cursor = x0
-    last = len(words) - 1
-    for i, weight in enumerate(weights):
-        width = round(line_width * weight / total)
-        right = x1 if i == last else cursor + width
-        boxes.append((cursor, y0, right, y1))
-        cursor = right + gap_width
+    left = 0.0
+    for weight in weights:
+        boxes.append(
+            (
+                x0 + round(line_width * left / total),
+                y0,
+                x0 + round(line_width * (left + weight) / total),
+                y1,
+            )
+        )
+        left += weight + _GAP_WEIGHT
     return boxes

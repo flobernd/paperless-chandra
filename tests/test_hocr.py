@@ -98,8 +98,7 @@ def test_render_gives_a_zero_width_box_one_pixel():
 
 
 def test_render_keeps_one_pixel_for_a_box_past_the_right_edge():
-    # estimate_word_boxes can place the last of six one-character words at
-    # (1202, 10, 1200, 30) inside a line box that ends at the page edge.
+    # The box is inverted as well, and ocrmypdf's hOCR parser drops an inverted box.
     page = _page(_line(box=(1202, 10, 1200, 30)), width=1200, height=1600)
     assert 'title="bbox 1199 10 1200 30' in render_hocr(page)
 
