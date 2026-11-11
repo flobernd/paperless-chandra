@@ -60,7 +60,8 @@ def test_render_hocr_escapes_text():
 
 
 def test_render_drops_xml_invalid_characters_from_words():
-    # ocrmypdf's hOCR parser rejects a NUL, and a lone surrogate cannot be encoded as UTF-8.
+    # ocrmypdf's hOCR parser rejects a NUL and U+FFFE, the code point right after the
+    # last one XML allows below U+10000. A lone surrogate cannot be encoded as UTF-8.
     hocr = render_hocr(_page(_line(text="in\x00voice\ud800\ufffe")))
     ElementTree.fromstring(hocr.encode("utf-8"))
     assert "invoice" in hocr and "\x00" not in hocr
