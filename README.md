@@ -40,7 +40,7 @@ keeps working, and archive PDFs remain PDF/A.
   [Performance notes](#performance-notes).
 
 > [!NOTE]
-> The paperless container itself stays CPU-only and needs no GPU or extra native libraries; only
+> The paperless container itself stays CPU-only and needs no GPU or extra native libraries. Only
 > the inference server needs one.
 
 ## Installation
@@ -69,7 +69,7 @@ docker build \
 Build args:
 
 - `PLUGIN_REF` - Git ref to build the plugin from. Use a release tag (`v0.1.0`) for reproducible
-  builds; `master` tracks the latest snapshot.
+  builds. `master` tracks the latest snapshot.
 - `PAPERLESS_TAG` - paperless-ngx base image tag (default `latest`). Set a version tag
   (`3.0`) for reproducible builds.
 
@@ -96,7 +96,7 @@ docker rm extract
 
 Mount the resulting `paperless_chandra-*.whl` (or a `paperless-chandra.tar.gz` sdist) alongside
 `setup.sh` under `/custom-cont-init.d/`. The script installs no native libraries and no inference
-runtime of its own; the install is idempotent across container restarts.
+runtime of its own. The install is idempotent across container restarts.
 
 ### C. Non-Docker host install
 
@@ -105,12 +105,12 @@ pip install "git+https://github.com/flobernd/paperless-chandra.git@v0.1.0"
 ```
 
 No extra native libraries are needed beyond what `ocrmypdf` and `chandra-ocr` already pull in.
-Then restart paperless-ngx; the parser is discovered via its `paperless_ngx.parsers` entry point.
+Then restart paperless-ngx. The parser is discovered via its `paperless_ngx.parsers` entry point.
 
 ## Docker Compose Example
 
 Trimmed excerpt of a stack pairing paperless-ngx (CPU only) with a GPU sidecar running Chandra
-through vLLM. Requires `CHANDRA_API_KEY` in a `.env` file alongside the compose file; the full
+through vLLM. Requires `CHANDRA_API_KEY` in a `.env` file alongside the compose file. The full
 stack below additionally needs `PAPERLESS_DB_USER` and `PAPERLESS_DB_PASSWORD`.
 
 ```yaml
@@ -184,15 +184,15 @@ standard `PAPERLESS_OCR_*` variables (see
 | Variable | Default | Description |
 | --- | --- | --- |
 | `PAPERLESS_CHANDRA_SERVER_URL` | *(required)* | URL of the OpenAI-compatible inference server hosting Chandra, for example `http://gpu-host:8000`. The `/v1` suffix is appended automatically when missing. |
-| `PAPERLESS_CHANDRA_MODEL_NAME` | `chandra` | Served model name the inference server advertises. Matches the vLLM launcher default; override it when your server advertises a different name. |
+| `PAPERLESS_CHANDRA_MODEL_NAME` | `chandra` | Served model name the inference server advertises. Matches the vLLM launcher default. Override it when your server advertises a different name. |
 | `PAPERLESS_CHANDRA_API_KEY` | *(unset)* | Bearer token for the server. The engine reads it from the environment, so the key never travels in the ocrmypdf options that paperless writes to its debug log. A `chandra_api_key` in `PAPERLESS_OCR_USER_ARGS` is ignored with a warning. When unset, the vLLM convention `EMPTY` is sent instead. |
 | `PAPERLESS_CHANDRA_MAX_OUTPUT_TOKENS` | `12384` | Per-page output token budget passed to the inference server. A page whose output reaches the budget is cut off, and the document fails (see [Troubleshooting](#a-page-hits-the-output-token-budget)). |
 | `PAPERLESS_CHANDRA_TIMEOUT` | `600` | Seconds each wait for data from the server may last before the document fails. The value is no limit for the whole request, so a gateway that sends bytes at intervals can keep a request open for longer. No retry on a timeout. |
-| `PAPERLESS_CHANDRA_CONTENT_FORMAT` | `text` | `text` or `markdown`. Selects what paperless stores as document content; the invisible PDF text layer underneath is always plain text. |
+| `PAPERLESS_CHANDRA_CONTENT_FORMAT` | `text` | `text` or `markdown`. Selects what paperless stores as document content. The invisible PDF text layer underneath is always plain text. |
 | `PAPERLESS_CHANDRA_SCORE` | `15` | Parser-registry priority. Higher scores win when more than one parser claims the same MIME type. The built-in Tesseract parser scores `10`, so the default makes Chandra preferred over it. paperless-ngx's own remote engine scores `20` when it is configured, and then wins over the default for the types both support (see [Honoured paperless-ngx settings](#honoured-paperless-ngx-settings)). |
 
 > [!NOTE]
-> `markdown` mode only changes the sidecar and stored document content; the invisible PDF text
+> `markdown` mode only changes the sidecar and stored document content. The invisible PDF text
 > layer is always plain text. When paperless extracts text from the archive PDF instead of the
 > sidecar (for example in `redo` mode), the stored content is plain text regardless of
 > `PAPERLESS_CHANDRA_CONTENT_FORMAT`.
@@ -219,13 +219,13 @@ dataclass that the Tesseract parser uses, then passed to `ocrmypdf.ocr()` exactl
 
 Three differences from a Tesseract-driven setup:
 
-- `PAPERLESS_OCR_LANGUAGE`: accepted but not mapped; Chandra is language-agnostic and runs a
+- `PAPERLESS_OCR_LANGUAGE`: accepted but not mapped. Chandra is language-agnostic and runs a
   single pass regardless of how many codes are listed. The first code labels the hOCR `lang`
   attribute. The engine reports every requested code as supported so ocrmypdf preflight never
   aborts.
 - `PAPERLESS_OCR_DESKEW`: supported via a projection-profile skew estimator (no model required).
 - `PAPERLESS_OCR_ROTATE_PAGES`: supported via tesseract's OSD mode (`--psm 0`), a fast local
-  orientation probe; Chandra still performs all text recognition. The tesseract binary and
+  orientation probe. Chandra still performs all text recognition. The tesseract binary and
   `osd.traineddata` ship in the official paperless-ngx image. If they are missing (custom
   images), the plugin logs one warning and pages keep their stored orientation.
 
@@ -275,8 +275,10 @@ installed the plugin (`pip show paperless-chandra` inside the container).
 
 ### Server unreachable, or the API key is rejected
 
-`check_options` probes the server once per worker process before OCR starts, so misconfiguration
-fails fast with an actionable message instead of failing deep inside a Celery task:
+`check_options` probes the server before the first page of each ocrmypdf run, except a run that
+skips the pages with text (`skip_text`), and keeps a successful probe for the worker process. A
+misconfiguration then fails fast with an actionable message instead of failing deep inside a Celery
+task:
 
 - `answered HTTP <status> at /models` - the server answered the preflight with an error status,
   and the document fails. Check that `PAPERLESS_CHANDRA_SERVER_URL` points at an OpenAI-compatible
@@ -348,12 +350,12 @@ llama-server ... --jinja --chat-template-kwargs '{"enable_thinking":false}'
 ```
 
 On recent llama.cpp builds `--reasoning off` or `--reasoning-budget 0` work as well. With
-thinking disabled the quantized model matches the vLLM output; the wrapping is caused by the
+thinking disabled the quantized model matches the vLLM output. The wrapping is caused by the
 template, not by quantization.
 
 ## License
 
 Released under the MIT license. See [`LICENSE`](LICENSE) for the full text.
 
-Chandra's model weights are licensed separately under a modified OpenRAIL-M license; see
+Chandra's model weights are licensed separately under a modified OpenRAIL-M license. See
 [Limitations](#limitations) for details.
