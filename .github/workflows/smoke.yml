@@ -15,7 +15,9 @@ on:
   # does not run twice.
   pull_request:
   # The job runs against :latest, so a weekly run catches a paperless-ngx
-  # release that breaks the plugin while this repository sees no push.
+  # release that breaks the plugin. GitHub stops the schedule after 60 days
+  # without repository activity, and the workflow then has to be enabled
+  # again by hand.
   schedule:
     - cron: "17 4 * * 1"
   workflow_dispatch:
@@ -25,13 +27,28 @@ permissions:
 
 jobs:
   smoke:
-    name: Import + entry-point smoke
+    name: Smoke test
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/paperless-ngx/paperless-ngx:latest
       # paperless's s6 entrypoint would try to boot the whole app; we only
       # want a shell to run the smoke script.
       options: --entrypoint /bin/bash
+
+    # Settings so the job runs without live services. The parser reads the
+    # SQLite database that the migration step creates, and the in-process
+    # cache keeps Redis out. PYTHONPATH stays on the two steps that import
+    # paperless, so pip does not run with the paperless source tree on its
+    # import path.
+    env:
+      DJANGO_SETTINGS_MODULE: paperless.settings
+      # django-treenode's post_migrate handler reads the Django cache,
+      # which is Redis by default, and the job runs no Redis.
+      PAPERLESS_CACHE_BACKEND: django.core.cache.backends.locmem.LocMemCache
+      PAPERLESS_DATA_DIR: /tmp/paperless-data
+      PAPERLESS_DBENGINE: sqlite
+      PAPERLESS_REDIS: redis://localhost:6379
+      PAPERLESS_SECRET_KEY: smoke-test-not-a-real-secret
 
     steps:
       - name: Checkout
@@ -55,30 +72,13 @@ jobs:
       - name: Migrate the SQLite database
         env:
           PYTHONPATH: /usr/src/paperless/src
-          DJANGO_SETTINGS_MODULE: paperless.settings
-          PAPERLESS_REDIS: redis://localhost:6379
-          PAPERLESS_DBENGINE: sqlite
-          PAPERLESS_SECRET_KEY: smoke-test-not-a-real-secret
-          # django-treenode's post_migrate handler reads the Django cache,
-          # which is Redis by default, and the job runs no Redis.
-          PAPERLESS_CACHE_BACKEND: django.core.cache.backends.locmem.LocMemCache
-          PAPERLESS_DATA_DIR: /tmp/paperless-data
         run: |
-          mkdir -p /tmp/paperless-data
+          mkdir -p "$PAPERLESS_DATA_DIR"
           "${{ steps.py.outputs.bin }}" /usr/src/paperless/src/manage.py migrate --noinput
 
       - name: Run smoke test
         env:
           PYTHONPATH: /usr/src/paperless/src
-          DJANGO_SETTINGS_MODULE: paperless.settings
-          # Settings so the smoke test runs without live services. The parser
-          # reads the SQLite database that the migration step created, and the
-          # in-process cache keeps Redis out.
-          PAPERLESS_REDIS: redis://localhost:6379
-          PAPERLESS_DBENGINE: sqlite
-          PAPERLESS_SECRET_KEY: smoke-test-not-a-real-secret
-          PAPERLESS_CACHE_BACKEND: django.core.cache.backends.locmem.LocMemCache
-          PAPERLESS_DATA_DIR: /tmp/paperless-data
           PAPERLESS_OCR_LANGUAGE: eng
         run: |
           "${{ steps.py.outputs.bin }}" tests/smoke_paperless.py
