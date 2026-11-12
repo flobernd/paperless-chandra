@@ -1,10 +1,11 @@
-"""check_options preflight."""
+"""check_options preflight and the validate hook."""
 
 from __future__ import annotations
 
 from types import SimpleNamespace
 
 import httpx
+import ocrmypdf
 import pytest
 from ocrmypdf.exceptions import MissingDependencyError
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
@@ -193,3 +194,15 @@ def test_probe_maps_a_url_without_a_scheme(monkeypatch):
     monkeypatch.setattr(client, "OpenAI", OpenAI)
     with pytest.raises(MissingDependencyError, match="not reachable"):
         ocrmypdf_plugin.check_options(_options(chandra_server_url="gpu-host"))
+
+
+def test_validate_leaves_no_report_when_the_page_query_fails(tmp_path, monkeypatch):
+    # The report needs ocrmypdf 17.11 or newer, and the installed release may be older.
+    monkeypatch.setattr(ocrmypdf, "__version__", "17.12.1")
+    report = tmp_path / "sidecar.txt.mask.json"
+    options = _options(
+        chandra_content_format="markdown", chandra_mask_report=str(report), redo_ocr=True
+    )
+    # Stands in for the page analysis of an ocrmypdf release that renamed ``filename``.
+    ocrmypdf_plugin.validate(pdfinfo=SimpleNamespace(), options=options)
+    assert not report.exists()
