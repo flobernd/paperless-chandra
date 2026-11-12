@@ -190,4 +190,11 @@ def markdown_sidecar(raw_html: str) -> str:
 
     soup = BeautifulSoup(raw_html, "html.parser")
     _write_out_widgets(soup)
+    # chandra-ocr converts the content of the layout blocks without the block
+    # elements around it, so two blocks that hold inline elements only run
+    # together. A block element inside each layout block keeps them apart.
+    for block in soup.find_all("div", recursive=False):
+        inner = soup.new_tag("div")
+        inner.extend(list(block.contents))
+        block.append(inner)
     return parse_markdown(str(soup), include_headers_footers=True, include_images=False)

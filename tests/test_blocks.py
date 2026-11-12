@@ -154,3 +154,11 @@ def test_markdown_sidecar_writes_out_form_widgets():
     assert "[x] Building works" in md
     assert "[ ] Demolition" in md
     assert "Applicant name: R. Okafor" in md
+
+
+def test_markdown_sidecar_keeps_adjacent_inline_blocks_apart():
+    raw = (
+        '<div data-label="Text" data-bbox="0 0 500 50"><span>Account</span></div>'
+        '<div data-label="Text" data-bbox="0 60 500 110"><span>123456</span></div>'
+    )
+    assert markdown_sidecar(raw) == "Account\n\n123456"
