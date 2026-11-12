@@ -162,3 +162,14 @@ def test_markdown_sidecar_keeps_adjacent_inline_blocks_apart():
         '<div data-label="Text" data-bbox="0 60 500 110"><span>123456</span></div>'
     )
     assert markdown_sidecar(raw) == "Account\n\n123456"
+
+
+def test_markdown_sidecar_keeps_the_words_around_a_blank_inline_element_apart():
+    raw = (
+        '<div data-label="Text" data-bbox="0 0 500 50"><p>Invoice<b><i> </i></b>number</p></div>'
+        '<div data-label="Text" data-bbox="0 60 500 110"><p>Total<b><br/></b>due</p></div>'
+        '<div data-label="Text" data-bbox="0 120 500 170"><p>Net<b><tbody> </tbody></b>amount</p></div>'
+        '<div data-label="Text" data-bbox="0 180 500 230">'
+        '<p><b><input type="checkbox" checked/> </b>Paid</p></div>'
+    )
+    assert markdown_sidecar(raw) == "Invoice number\n\nTotal  \ndue\n\nNet amount\n\n**[x]** Paid"
