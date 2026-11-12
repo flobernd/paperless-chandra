@@ -96,6 +96,11 @@ class ChandraEngine(OcrEngine):
             # chandra-ocr answers a conversion that fails with an empty string,
             # and the page still holds the words of the answer.
             sidecar = blocks.markdown_sidecar(raw) or blocks.page_sidecar(page)
+            if sidecar:
+                # ocrmypdf joins the page texts with a form feed, and paperless-ngx
+                # turns that into a space. After a blank line it removes the space,
+                # so the next page starts a paragraph of its own.
+                sidecar += "\n\n"
         else:
             sidecar = blocks.page_sidecar(page)
         write_document(page, output_hocr, output_text, sidecar=sidecar)
