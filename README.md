@@ -193,10 +193,29 @@ standard `PAPERLESS_OCR_*` variables (see
 | `PAPERLESS_CHANDRA_SCORE` | `15` | Parser-registry priority. Higher scores win when more than one parser claims the same MIME type. The built-in Tesseract parser scores `10`, so the default makes Chandra preferred over it. paperless-ngx's own remote engine scores `20` when it is configured, and then wins over the default for the types both support (see [Honoured paperless-ngx settings](#honoured-paperless-ngx-settings)). |
 
 > [!NOTE]
-> `markdown` mode only changes the sidecar and stored document content. The invisible PDF text
-> layer is always plain text. When paperless extracts text from the archive PDF instead of the
-> sidecar (for example in `redo` mode), the stored content is plain text regardless of
-> `PAPERLESS_CHANDRA_CONTENT_FORMAT`.
+> `markdown` mode only changes the sidecar and stored document content. The invisible PDF text layer
+> is always plain text. With a page limit (`PAPERLESS_OCR_PAGES`) the stored content is plain text
+> in each mode. When OCR gives no text at all for a document, as for a PDF that ocrmypdf rejects as
+> encrypted or signed, the stored content is plain text that the input file already held, or empty.
+>
+> In `auto` mode, the default, the stored content is markdown when no page was skipped, and plain
+> text when one was. When paperless finds that a document already has text, the pages with text get
+> no OCR.
+>
+> In `redo` mode the stored content is markdown when no page was skipped and the archive PDF keeps
+> no text of the input file: no page had an annotation, such as a comment or a stamp, or visible
+> text of its own, such as a born-digital page or a page that mixes typed text with a scan, and
+> ocrmypdf removed the old invisible text layer of each page. When ocrmypdf refuses `redo` for a
+> file, for example a PDF with a fillable form, or the `redo` run finds no text, paperless runs OCR
+> on the file again as in `force` mode, and the stored content is markdown when no page was skipped.
+> Both need ocrmypdf 17.11 or newer (paperless-ngx 3.2 or newer). In each other `redo` case
+> paperless extracts the text from the archive PDF, and the stored content is plain text regardless
+> of `PAPERLESS_CHANDRA_CONTENT_FORMAT`.
+>
+> With `PAPERLESS_OCR_MODE=force` the stored content is markdown for each document in which no page
+> is skipped. `pages` and `skip_big` in `PAPERLESS_OCR_USER_ARGS` skip pages. The cost of `force` is
+> that each page of the archive becomes an image, and the text of a typed page is what the model
+> read.
 
 ## Honoured paperless-ngx settings
 
