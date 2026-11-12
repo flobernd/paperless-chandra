@@ -93,7 +93,9 @@ class ChandraEngine(OcrEngine):
             langs[0] if langs else "eng",
         )
         if content_format(options) == "markdown" and raw:
-            sidecar = blocks.markdown_sidecar(raw)
+            # chandra-ocr answers a conversion that fails with an empty string,
+            # and the page still holds the words of the answer.
+            sidecar = blocks.markdown_sidecar(raw) or blocks.page_sidecar(page)
         else:
             sidecar = blocks.page_sidecar(page)
         write_document(page, output_hocr, output_text, sidecar=sidecar)
