@@ -139,3 +139,18 @@ def test_markdown_sidecar_converts_headings_and_keeps_footers():
     md = markdown_sidecar(raw)
     assert "# Title" in md
     assert "page 1 of 2" in md
+
+
+def test_markdown_sidecar_writes_out_form_widgets():
+    raw = (
+        '<div data-label="Text" data-bbox="0 0 500 50">'
+        '<p><input type="checkbox" checked/> Building works</p></div>'
+        '<div data-label="Text" data-bbox="0 60 500 110">'
+        '<p><input type="checkbox"/> Demolition</p></div>'
+        '<div data-label="Text" data-bbox="0 120 500 170">'
+        '<p>Applicant name: <input type="text" value="R. Okafor"/></p></div>'
+    )
+    md = markdown_sidecar(raw)
+    assert "[x] Building works" in md
+    assert "[ ] Demolition" in md
+    assert "Applicant name: R. Okafor" in md
