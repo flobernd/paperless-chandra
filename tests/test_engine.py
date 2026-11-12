@@ -88,6 +88,16 @@ def test_markdown_answer_without_a_block_drops_a_lone_surrogate(tmp_path, monkey
     assert text.read_text(encoding="utf-8") == ""
 
 
+def test_markdown_page_keeps_its_text_when_the_conversion_fails(tmp_path, monkeypatch):
+    # chandra-ocr answers a conversion that fails with an empty string, and its
+    # converter fails on 2000 nested tags through the recursion limit.
+    nested = "<b>" * 2000 + "deepword" + "</b>" * 2000
+    raw = f'<div data-bbox="0 0 500 500" data-label="Text"><p>{nested} tail</p></div>'
+    options = _options(chandra_content_format="markdown")
+    _, text = _run_generate_hocr(tmp_path, monkeypatch, options, raw=raw)
+    assert "deepword tail" in text.read_text(encoding="utf-8")
+
+
 def test_control_character_reference_between_words_leaves_no_empty_word(tmp_path, monkeypatch):
     raw = '<div data-bbox="0 0 500 500" data-label="Text">a &#1; b</div>'
     _, text = _run_generate_hocr(tmp_path, monkeypatch, _options(), raw=raw)
