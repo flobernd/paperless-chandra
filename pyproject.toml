@@ -34,6 +34,7 @@ dependencies = [
     "openai>=2.2",
     "beautifulsoup4>=4.12",
     "numpy>=1.26",
+    "pikepdf>=10",
     "pillow>=10",
 ]
 
