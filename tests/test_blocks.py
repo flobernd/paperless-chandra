@@ -90,6 +90,29 @@ def test_empty_content_produces_no_block():
     assert page.blocks == []
 
 
+#: 120 characters in a box of 600 by 108 pixels. With a glyph half as wide as
+#: its font size and a line pitch of 1.2 font sizes, three lines of 40
+#: characters fill that box: a glyph is 15 pixels wide and a line 36 pixels high.
+_PARAGRAPH = (
+    "The applicant accepts that the council may inspect the works at every stage "
+    "and that the plan is a part of this request."
+)
+
+
+def test_paragraph_block_gets_one_line_for_each_line_it_fills():
+    chunk = _chunk(content=f"<p>{_PARAGRAPH}</p>", bbox=(0, 0, 600, 108))
+    page = page_from_chunks([chunk], 1000, 1000, "eng")
+    rows = [
+        (" ".join(word.text for word in line.words), line.box[1], line.box[3])
+        for line in page.blocks[0].lines
+    ]
+    assert rows == [
+        ("The applicant accepts that the council", 0, 36),
+        ("may inspect the works at every stage and", 36, 72),
+        ("that the plan is a part of this request.", 72, 108),
+    ]
+
+
 # ----------------------------------------------------------------- sidecars
 
 
@@ -100,6 +123,12 @@ def test_page_sidecar_joins_blocks_with_blank_lines():
     ]
     page = page_from_chunks(chunks, 1000, 1000, "eng")
     assert page_sidecar(page) == "one\ntwo\n\nthree"
+
+
+def test_page_sidecar_keeps_a_wrapped_paragraph_on_one_line():
+    chunk = _chunk(content=f"<p>{_PARAGRAPH}</p>", bbox=(0, 0, 600, 108))
+    page = page_from_chunks([chunk], 1000, 1000, "eng")
+    assert page_sidecar(page) == _PARAGRAPH
 
 
 def test_markdown_sidecar_converts_headings_and_keeps_footers():

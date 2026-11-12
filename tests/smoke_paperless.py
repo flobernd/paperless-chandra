@@ -197,7 +197,7 @@ def check_document_run() -> None:
     import pikepdf
     from documents.parsers import ParseError
     from e2e.make_test_page import write_page
-    from e2e.stub_chandra import STUB_MARKER, serve_in_thread
+    from e2e.stub_chandra import STUB_MARKER, STUB_PHRASE, serve_in_thread
 
     from paperless_chandra.engine.client import ChandraClientError
     from paperless_chandra.parser import PaperlessChandraParser
@@ -222,6 +222,13 @@ def check_document_run() -> None:
                 if "Chandra" not in creator:
                     _fail(f"the archive PDF's /Creator should name Chandra, got {creator!r}")
                 _ok(f"the archive PDF names its creator: {creator}")
+
+                # Only pdftotext shows whether the words of a paragraph keep their
+                # spaces, because it finds a space by the shape of the glyphs.
+                archive_text = parser.extract_text(None, archive) or ""
+                if STUB_PHRASE not in archive_text:
+                    _fail(f"the archive text lacks {STUB_PHRASE!r}: {archive_text!r}")
+                _ok("the archive text keeps the spaces between the words of a paragraph")
 
             markdown = {**stub_url, "PAPERLESS_CHANDRA_CONTENT_FORMAT": "markdown"}
             with mock.patch.dict(os.environ, markdown), PaperlessChandraParser() as parser:
