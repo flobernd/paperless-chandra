@@ -39,6 +39,23 @@ _LINE_BREAK_TAGS = ("p", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "pre", 
 
 _WS_RE = re.compile(r"[^\S\n]+")
 
+#: Inline tags that the markdown converter of chandra-ocr drops when they hold
+#: only white space or line breaks, which joins the words around them.
+_SPACE_DROPPING_TAGS = (
+    "a",
+    "b",
+    "code",
+    "del",
+    "em",
+    "i",
+    "kbd",
+    "s",
+    "samp",
+    "strong",
+    "sub",
+    "sup",
+)
+
 #: A glyph is about half as wide as its font size, and the next line starts
 #: about 1.2 font sizes lower. The two give the number of lines that a text
 #: of a known length fills in a box of a known shape.
@@ -190,6 +207,20 @@ def markdown_sidecar(raw_html: str) -> str:
 
     soup = BeautifulSoup(raw_html, "html.parser")
     _write_out_widgets(soup)
+    # The widgets are written out first, so that their text counts. Unwrapping
+    # keeps the white space and the line breaks of a blank element. What the
+    # converter makes of a blank element of another kind inside it differs from
+    # tag to tag, so a space takes the place of an element that holds one.
+    for tag in soup.find_all(_SPACE_DROPPING_TAGS):
+        text = tag.get_text()
+        if not text.strip() and (text or tag.find("br") is not None):
+            if all(
+                inner.name == "br" or inner.name in _SPACE_DROPPING_TAGS
+                for inner in tag.find_all(True)
+            ):
+                tag.unwrap()
+            else:
+                tag.replace_with(" ")
     # chandra-ocr converts the content of the layout blocks without the block
     # elements around it, so two blocks that hold inline elements only run
     # together. A block element inside each layout block keeps them apart.
