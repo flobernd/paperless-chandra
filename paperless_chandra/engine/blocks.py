@@ -92,11 +92,7 @@ def block_lines(content_html: str) -> list[str]:
     soup = BeautifulSoup(clean_text(content_html), "html.parser")
     for br in soup.find_all("br"):
         br.replace_with("\n")
-    for widget in soup.find_all("input"):
-        if str(widget.get("type") or "").lower() == "checkbox":
-            widget.replace_with("[x]" if widget.has_attr("checked") else "[ ]")
-        else:
-            widget.replace_with(str(widget.get("value") or ""))
+    _write_out_widgets(soup)
     for cell in soup.find_all(["td", "th"]):
         cell.append(" ")
     for tag in soup.find_all(_LINE_BREAK_TAGS):
@@ -104,6 +100,19 @@ def block_lines(content_html: str) -> list[str]:
         tag.insert_after("\n")
     lines = (_WS_RE.sub(" ", line).strip() for line in soup.get_text().split("\n"))
     return [line for line in lines if line]
+
+
+def _write_out_widgets(soup: BeautifulSoup) -> None:
+    """Replace each form widget with the text that it shows on the page.
+
+    A widget holds its state in attributes, which neither ``get_text`` nor
+    the markdown converter reads.
+    """
+    for widget in soup.find_all("input"):
+        if str(widget.get("type") or "").lower() == "checkbox":
+            widget.replace_with("[x]" if widget.has_attr("checked") else "[ ]")
+        else:
+            widget.replace_with(str(widget.get("value") or ""))
 
 
 def _chunk_box(chunk: dict, width: int, height: int) -> BBox:
@@ -179,4 +188,6 @@ def markdown_sidecar(raw_html: str) -> str:
     """
     from chandra.output import parse_markdown
 
-    return parse_markdown(raw_html, include_headers_footers=True, include_images=False)
+    soup = BeautifulSoup(raw_html, "html.parser")
+    _write_out_widgets(soup)
+    return parse_markdown(str(soup), include_headers_footers=True, include_images=False)
