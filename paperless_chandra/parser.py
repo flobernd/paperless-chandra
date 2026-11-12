@@ -4,10 +4,10 @@
 ``paperless.parsers.tesseract.RasterisedDocumentParser``, and inherits its
 pipeline: the OCR modes, the image handling, the PDF/A conversion and the
 safe-fallback retry. The subclass adds its identity, the remote-service
-flag, its score and one override of ``construct_ocrmypdf_parameters``. The
-override loads the Chandra ocrmypdf plugin and passes it these options, each
-read from its ``PAPERLESS_CHANDRA_*`` variable unless the OCR user arguments
-set it:
+flag, its score and two overrides, ``construct_ocrmypdf_parameters`` and
+``extract_text``. The first override loads the Chandra ocrmypdf plugin and
+passes it these options, each read from its ``PAPERLESS_CHANDRA_*`` variable
+unless the OCR user arguments set it:
 
 * ``chandra_content_format``
 * ``chandra_max_output_tokens``
@@ -18,10 +18,19 @@ set it:
 The parent writes the options to the debug log, so the API key stays out of
 them and the engine reads ``PAPERLESS_CHANDRA_API_KEY`` from the environment.
 
-The plugin relies on three contracts of the parent's ``parse``:
+In redo mode the parent takes the document text from the archive, because
+ocrmypdf blanks the visible text of a page before the engine reads it. One
+override of ``extract_text`` returns the sidecar of a redo installation
+when the markdown format is set and the archive keeps no text of the input.
+The ocrmypdf plugin reports the pages that keep such text for that purpose,
+in a file beside the sidecar.
+
+The plugin relies on four contracts of the parent's ``parse``:
 
 * It calls the builder for each ocrmypdf run, the safe-fallback run
   included, so each run loads the Chandra engine.
+* It calls ``extract_text`` with the sidecar file of the run that just
+  ended, in a scratch directory that no other document uses.
 * It takes the document text from the sidecar file, which ocrmypdf
   assembles from the page text the engine writes.
 * Its exception handling decides what fails the consumption: an error the
@@ -30,11 +39,13 @@ The plugin relies on three contracts of the parent's ``parse``:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from pathlib import Path
 from typing import Any, Final
 
+from paperless.models import ModeChoices
 from paperless.parsers.tesseract import RasterisedDocumentParser
 from paperless.version import __version__ as _host_version
 
@@ -71,6 +82,12 @@ if _host_version[0] > _TESTED_MAJOR:
     )
 
 _OCRMYPDF_PLUGIN_MODULE: Final[str] = "paperless_chandra.ocrmypdf_plugin"
+
+_SKIP_MARKER: Final[str] = "[OCR skipped on page"
+
+
+def _mask_report_path(sidecar_file: Path) -> Path:
+    return sidecar_file.with_name(f"{sidecar_file.name}.mask.json")
 
 
 def _env_int(name: str, default: int) -> int:
@@ -200,4 +217,49 @@ class PaperlessChandraParser(RasterisedDocumentParser):
             )
         for key, value in self._chandra_options.items():
             args.setdefault(key, value)
+        # Set after the user arguments, so that the report lies where
+        # extract_text looks for it.
+        if self.settings.mode == ModeChoices.REDO:
+            report = _mask_report_path(sidecar_file)
+            # A report that an earlier run left at this path must not speak
+            # for this one, in which the hook can end without a report.
+            report.unlink(missing_ok=True)
+            args["chandra_mask_report"] = str(report)
         return args
+
+    def extract_text(self, sidecar_file: Path | None, pdf_file: Path) -> str | None:
+        # The parent reads no sidecar in redo mode, because a page with blanked
+        # text has only the rest of its text there.
+        if sidecar_file is not None and self.settings.mode == ModeChoices.REDO:
+            text = self._whole_sidecar(sidecar_file)
+            if text:
+                self.log.debug("Using text from sidecar file")
+                return text
+        return super().extract_text(sidecar_file, pdf_file)
+
+    def _whole_sidecar(self, sidecar_file: Path) -> str | None:
+        """The post-processed sidecar text when the archive holds no other text, else ``None``."""
+        try:
+            report = json.loads(_mask_report_path(sidecar_file).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        if report != {"masked": []} or not sidecar_file.is_file():
+            return None
+        try:
+            # paperless-ngx moved post_process_text to another module in 3.0.5
+            # and kept the name importable from the tesseract module. A release
+            # that drops the name fails this import, which costs the markdown
+            # content of redo mode. At the head of this module the same failure
+            # would cost the parser, because the registry passes it over.
+            from paperless.parsers.tesseract import (
+                post_process_text,
+                read_file_handle_unicode_errors,
+            )
+        except ImportError:
+            return None
+        text = read_file_handle_unicode_errors(sidecar_file)
+        # ocrmypdf writes the marker for a page that got no OCR. Such a page keeps
+        # its old text layer, which the report takes for stripped.
+        if _SKIP_MARKER in text:
+            return None
+        return post_process_text(text)
