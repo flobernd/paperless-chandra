@@ -50,20 +50,22 @@ class Word:
 
 @dataclass
 class Line:
-    """A reading line: its box and its words.
+    """A line of the text layer: its box and its words.
 
     The words carry the text. A Chandra reading line has one space between
     its words, so the sidecar gets the line back by joining them with one
-    space.
+    space. ``continues`` marks a line that carries on the reading line of
+    the line before it, so the sidecar joins the two again.
     """
 
     box: BBox
     words: list[Word] = field(default_factory=list)
+    continues: bool = False
 
 
 @dataclass
 class Block:
-    """A layout region (column area / paragraph) containing reading lines."""
+    """A layout region (column area / paragraph) containing the lines of the text layer."""
 
     box: BBox
     lines: list[Line] = field(default_factory=list)

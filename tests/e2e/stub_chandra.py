@@ -13,10 +13,19 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 STUB_MARKER = "PAPERLESS CHANDRA STUB OK"
 
+#: Words of the paragraph below, which the model returns as one reading line.
+STUB_PHRASE = "several lines of running text"
+
 _PAGE_HTML = (
     f'<div data-label="Section-Header" data-bbox="60 40 940 120"><h1>{STUB_MARKER}</h1></div>'
     '<div data-label="Text" data-bbox="60 160 940 400">'
     "<p>Stub invoice 2026-0042<br>Second stub line</p></div>"
+    '<div data-label="Text" data-bbox="60 440 940 560">'
+    f"<p>This paragraph stands for {STUB_PHRASE}. The model returns such a block as one "
+    "reading line with the box of the whole block, and the text layer has to split it into "
+    "the lines that the page shows. Each word must come back from the archive with the "
+    "spaces around it, in the order in which the page holds it, so that a search for a "
+    "phrase of several words finds the document again.</p></div>"
 )
 
 
